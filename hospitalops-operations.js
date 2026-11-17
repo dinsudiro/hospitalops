@@ -1,0 +1,167 @@
+import {fieldsFor,guess,parseDate,prepareRows,readDocument} from './hospitalops-import.js';
+
+const fields=['type','number','partner','name','scope','start','end','note'];
+const DAY=86400000;
+export function agreementStatus(record,today) {
+ const version=[record,...(record.history||[])].find(v=>v.start<=today&&today<=v.end)||record;
+ const days=Math.round((Date.parse(version.end)-Date.parse(today))/DAY);
+ const name=version.start>today?'Belum mulai':days<0?'Berakhir':days<=30?'Segera berakhir':'Aktif';
+ const countdown=version.start>today?'Mulai dalam '+Math.round((Date.parse(version.start)-Date.parse(today))/DAY)+' hari':days<0?'Lewat '+Math.abs(days)+' hari':days===0?'Berakhir hari ini':'Sisa '+days+' hari';
+ return {name,countdown,version};
+}
+export function revise(values,old,today) {
+ const next=Object.fromEntries(fields.map(k=>[k,String(values[k]??'').trim()]));
+ if(!next.name||!next.partner||!next.scope||!['PKS','MoU'].includes(next.type))throw new Error('Isi judul, mitra, dan ruang lingkup.');
+ if(!parseDate(next.start)||!parseDate(next.end)||next.start>next.end)throw new Error('Tanggal berakhir harus sama dengan atau setelah tanggal mulai.');
+ const reason=String(values.reason||'').trim();
+ if(old&&(!reason||fields.every(k=>next[k]===old[k])))throw new Error('Masukkan perubahan dan alasannya.');
+ if(old&&values.change==='Perpanjangan'&&next.end<=old.end)throw new Error('Perpanjangan harus memiliki tanggal berakhir yang lebih akhir.');
+ const snapshot=old&&Object.fromEntries([...fields,'reason','change','version','savedAt'].map(k=>[k,old[k]]));
+ return {...next,version:(old?.version||0)+1,change:old?values.change:'Pencatatan awal',reason,savedAt:today,history:old?[snapshot,...(old.history||[])]:[]};
+}
+
+export function createOperations(ui) {
+ const {allowed,mod,records,data,heading,panel,button,table,label,input,select,options,esc,fmt,show,form,today,unique,campaigns,statuses,stages}=ui;
+ const text=(k,v,required=false)=>'<textarea name="'+k+'" maxlength="700" '+(required?'required':'')+'>'+esc(v)+'</textarea>';
+ const date=(k,v)=>input(k,v,'date','required min="1900-01-01" max="2100-12-31"');
+ const menu=()=>ui.modules().filter(id=>allowed(mod(id)));
+ let current=null;
+ let filter='';
+ const find=id=>records('pks').find(p=>p.id===id);
+ const marker=status=>'<span class="pill '+(status.name==='Segera berakhir'?'warn':status.name==='Aktif'?'':'neutral')+'">'+status.name+'</span> '+status.countdown;
+ function pksView(){
+  const rows=records('pks').map(r=>({r,status:agreementStatus(r,today())})).sort((a,b)=>a.status.version.end.localeCompare(b.status.version.end));
+  const selected=rows.filter(x=>!filter||x.status.name===filter);
+  const body=selected.map(({r,status})=>'<tr><td><button class="rowbtn" data-ops="detail" data-ops-id="'+esc(r.id)+'">'+esc(r.name)+'</button><div class="sub">'+esc(r.number||'')+'</div></td><td>'+esc(r.type)+'</td><td>'+esc(r.partner)+'</td><td>'+fmt(status.version.start)+' – '+fmt(status.version.end)+'</td><td>'+marker(status)+'</td><td>'+esc(r.version)+'</td></tr>').join('');
+  return heading('PKS / MoU','Pantau masa berlaku dan buka riwayat tiap perjanjian.',button('Tambah perjanjian','data-ops="new"','plus',true))+
+   panel('Daftar perjanjian',rows.length+' perjanjian · '+rows.filter(x=>x.status.name==='Segera berakhir').length+' segera berakhir',
+    '<div class="filters"><select id="ops-status" aria-label="Status perjanjian">'+options([['','Semua status'],'Aktif','Segera berakhir','Berakhir','Belum mulai'],filter)+'</select></div>'+
+    table(['Perjanjian','Jenis','Mitra','Masa berlaku','Status','Versi'],body||'<tr><td colspan="6">Belum ada perjanjian pada filter ini.</td></tr>'));
+ }
+ function version(r) {
+  return '<div class="ops-version"><strong>Versi '+esc(r.version)+' · '+esc(r.change)+'</strong><p class="sub">'+fmt(r.savedAt)+'</p><dl>'+
+   [['Jenis / nomor',r.type+' · '+(r.number||'–')],['Judul',r.name],['Mitra',r.partner],['Masa berlaku',fmt(r.start)+' – '+fmt(r.end)],['Ruang lingkup',r.scope],['Alasan',r.reason],['Catatan',r.note]]
+   .filter(([,v])=>v).map(([k,v])=>'<dt>'+k+'</dt><dd>'+esc(v)+'</dd>').join('')+'</dl></div>';
+ }
+ function detail(r) {
+  if(!r)return;
+  const status=agreementStatus(r,today());
+  show('Detail PKS / MoU','<div class="ops-stack"><p>'+marker(status)+(status.version!==r?' · Berdasarkan versi '+esc(status.version.version):'')+'</p>'+
+   version(r)+'<div class="actions">'+button('Catat perubahan','data-ops="revise" data-ops-id="'+esc(r.id)+'"','content')+
+   button('Catat perpanjangan','data-ops="extend" data-ops-id="'+esc(r.id)+'"','calendar',true)+'</div><h3>Riwayat versi</h3>'+
+   ((r.history||[]).map(h=>'<details><summary>Versi '+esc(h.version)+' · '+esc(h.change)+' · '+fmt(h.start)+' – '+fmt(h.end)+'</summary>'+version(h)+'</details>').join('')||'<p class="sub">Belum ada riwayat.</p>')+'</div>');
+ }
+ function agreement(r,change) {
+  const controls='<div class="ops-grid">'+label('Jenis',select('type',['PKS','MoU'],r?.type||'PKS'))+
+   label('Nomor dokumen',input('number',r?.number,'text','maxlength="100"'))+
+   label('Nama mitra',input('partner',r?.partner,'text','required maxlength="140"'))+
+   label('Judul perjanjian',input('name',r?.name,'text','required maxlength="140"'))+
+   label('Tanggal mulai',date('start',r?.start||today()))+label('Tanggal berakhir',date('end',r?.end))+'</div>'+
+   label('Ruang lingkup',text('scope',r?.scope,true))+(r?label('Alasan '+change.toLowerCase(),text('reason','',true)):'')+
+   label('Catatan',text('note',r?.note));
+  show(r?'Catat '+change.toLowerCase():'Tambah PKS / MoU',form('ops-pks',controls,'Simpan','data-ops-id="'+esc(r?.id||'')+'" data-change="'+esc(change||'')+'"'));
+ }
+ function importView() {
+  return heading('Impor Dokumen','Baca dokumen, cocokkan kolom, lalu periksa hasil sebelum menyimpan.')+
+   panel('Modul tujuan','Pilih modul agar hasil impor mengikuti kolom HospitalOps.',
+    '<div class="actions">'+menu().map(id=>button(mod(id)[1],'data-ops="import" data-ops-id="'+esc(id)+'"','content')).join('')+'</div>');
+ }
+ function importDialog(id) {
+  if(!menu().includes(id))return;
+  current={id,sections:[],section:0,header:0,mapping:{},valid:[],ready:false};
+  show('Impor ke '+mod(id)[1],'<div class="ops-stack">'+
+   label('File Excel, Word, atau PDF','<input id="ops-file" type="file" accept=".xlsx,.xls,.csv,.docx,.pdf">')+
+   '<div class="actions">'+button('Unduh contoh CSV','data-ops="template"')+'</div>'+
+   '<div id="ops-message" class="sub" role="status">Gunakan tabel dengan judul kolom atau teks berlabel. Maksimal 10 MB dan 100 catatan per impor.</div>'+
+   '<div id="ops-sheet-controls"></div><div id="ops-preview"></div></div>');
+ }
+ function preview(rebuild=false) {
+  const sheet=current.sections[current.section],target=document.querySelector('#ops-preview');
+  if(!sheet||!target)return;
+  const list=fieldsFor(current.id),header=sheet.rows[current.header];
+  if(rebuild){
+   current.mapping=guess(list,header);
+   document.querySelector('#ops-sheet-controls').innerHTML='<div class="ops-grid">'+
+    label('Bagian dokumen','<select id="ops-section">'+options(current.sections.map((x,i)=>[i,x.name]),current.section)+'</select>')+
+    label('Baris judul kolom','<select id="ops-header">'+options(sheet.rows.slice(0,30).map((r,i)=>[i,'Baris '+(i+1)+' · '+r.slice(0,4).map(x=>String(x).slice(0,32)).join(' / ')]),current.header)+'</select>')+'</div>';
+  }
+  const result=prepareRows({module:current.id,rows:sheet.rows.slice(current.header+1),fields:list,mapping:current.mapping,campaigns:campaigns(),existing:records(current.id),statuses:current.id==='pipeline'?stages:statuses});
+  current.valid=result.filter(r=>!r.issues.length);
+  current.ready=current.valid.length>0&&current.valid.length<=100;
+  const cols=[[-1,'Lewati'],...header.map((x,i)=>[i,'Kolom '+(i+1)+' · '+String(x).slice(0,80)])];
+  const displayed=list.filter(([k])=>current.mapping[k]>=0);
+  const sorted=[...result.filter(r=>r.issues.length),...current.valid].slice(0,30);
+  const rows=sorted.map(r=>'<tr><td>'+(current.header+r.index+2)+'</td>'+
+   displayed.map(([k])=>'<td>'+esc(String(r.item[k]??'–').slice(0,140))+'</td>').join('')+
+   '<td>'+esc(r.issues.join(' · ')||'Siap')+'</td></tr>').join('');
+  target.innerHTML='<details '+(!current.ready?'open':'')+'><summary>Cocokkan kolom dokumen</summary><div class="ops-grid">'+
+   list.map(([k,n])=>label(n,'<select data-ops-field="'+k+'">'+options(cols,current.mapping[k])+'</select>')).join('')+'</div></details>'+
+   '<p class="sub" role="status">'+current.valid.length+' siap · '+(result.length-current.valid.length)+' dilewati'+(result.length>30?' · Pratinjau sampai 30 baris':'')+
+   (current.valid.length>100?' · Bagi file menjadi beberapa bagian.':'')+'</p>'+
+   (rows?table(['Baris',...displayed.map(([,n])=>n),'Pemeriksaan'],rows):'<p class="sub">Belum ada baris data.</p>')+
+   (current.ready?form('ops-import','','Simpan '+current.valid.length+' catatan'):'');
+ }
+ async function change(element) {
+  if(element.id==='ops-status'){filter=element.value;ui.render();document.querySelector('#ops-status')?.focus();return true}
+  if(!current)return false;
+  if(element.id==='ops-file'){
+   const session=current, message=document.querySelector('#ops-message');
+   current.ready=false;current.sections=[];document.querySelector('#ops-sheet-controls').innerHTML='';document.querySelector('#ops-preview').innerHTML='';
+   if(!element.files.length)return true;
+   element.disabled=true;message.textContent='Sedang membaca dokumen…';
+   try{
+    const result=await readDocument(element.files[0]);
+    if(current!==session||!message.isConnected)return true;
+    current.sections=result.filter(s=>s.rows.length>1&&s.rows.length<=2000&&s.rows.every(r=>r.length<=100));
+    if(!current.sections.length)throw new Error('Tidak ada tabel yang terbaca. Gunakan contoh CSV atau periksa format dokumen.');
+    current.section=0;current.header=0;
+    message.textContent=element.files[0].name+' · '+current.sections.length+' bagian siap diperiksa.'+(result.length>current.sections.length?' Bagian kosong atau di luar batas ukuran dilewati.':'');
+    preview(true);
+   }catch(error){if(current===session)message.textContent=error.message}
+   finally{element.disabled=false}
+   return true;
+  }
+  if(element.id==='ops-section'){current.section=Number(element.value);current.header=0;preview(true);return true}
+  if(element.id==='ops-header'){current.header=Number(element.value);preview(true);return true}
+  if(element.dataset.opsField){const key=element.dataset.opsField;current.mapping[key]=Number(element.value);preview();const field=document.querySelector('[data-ops-field="'+key+'"]');field.closest('details').open=true;field.focus();return true}
+  return false;
+ }
+ function template() {
+  if(!current)return;
+  const csv='\uFEFF'+fieldsFor(current.id).map(([,n])=>'"'+n.replaceAll('"','""')+'"').join(',')+'\r\n';
+  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');
+  link.href=url;link.download='hospitalops-'+current.id+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
+ return {
+  pksView,importView,change,
+  click(d){
+   if(d.ops==='import')return importDialog(d.opsId);
+   if(d.ops==='template')return template();
+   if(!allowed(mod('pks')))return;
+   const r=find(d.opsId);
+   if(d.ops==='new')agreement();
+   if(d.ops==='detail'&&r)detail(r);
+   if(d.ops==='revise'&&r)agreement(r,'Perubahan');
+   if(d.ops==='extend'&&r)agreement(r,'Perpanjangan');
+  },
+  mutate(f,values){
+   if(f.dataset.form==='ops-pks'){
+    if(!allowed(mod('pks')))throw new Error('Modul dinonaktifkan.');
+    const old=find(f.dataset.opsId), existing=records('pks');
+    if(f.dataset.opsId&&!old)throw new Error('Perjanjian tidak ditemukan.');
+    const next={id:old?.id||unique(),...revise({...values,change:f.dataset.change},old,today())};
+    data().records.pks=old?existing.map(r=>r.id===old.id?next:r):[...existing,next];
+    return {page:'pks',message:'Perjanjian tersimpan.'};
+   }
+   if(!current?.ready||!menu().includes(current.id))throw new Error('Periksa kembali hasil impor.');
+   const id=current.id;
+   const entries=current.valid.map(({item})=>{
+    const row={id:unique(),owner:'Manager',...item};
+    if(id==='promo')row.campaign=row.id;
+    return row;
+   });
+   data().records[id]=[...records(id),...entries];
+   return {page:id,message:entries.length+' catatan berhasil diimpor.'};
+  }
+ };
+}

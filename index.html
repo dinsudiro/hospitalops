@@ -195,18 +195,19 @@ dialog::backdrop { background: #12382d75; }
 #accountError, #cloudError { color: #a62e2e; font-size: 13px; }
 #accountError:empty, #cloudError:empty { display:none; }
 </style>
+<link rel="stylesheet" href="./hospitalops-operations.css">
 </head>
 <body>
-<section id="account" class="account card" aria-label="Akses HospitalOps"><h1>HospitalOps</h1><p role="status">Memuat Firebase…</p></section>
+<section id="account" class="account card" aria-label="Akses HospitalOps"><h1>HospitalOps</h1><p role="status">Memuat Supabase…</p></section>
 <div class="shell" hidden>
 <aside class="sidebar" id="sidebar" aria-label="Navigasi utama"></aside>
 <div class="main"><header class="topbar" id="topbar"></header><main class="content" id="content"></main></div>
 </div>
 <dialog id="modal" aria-labelledby="modal-title"></dialog><div id="toast" class="toast" role="status" hidden></div>
 <script type="module">
-  import('./app.js').catch(() => {
+  import('./supabase-app.js').catch(() => {
     document.querySelector('#account [role="status"]').textContent =
-      'Firebase gagal dimuat. Periksa koneksi dan muat ulang halaman.';
+      'Supabase gagal dimuat. Periksa koneksi dan muat ulang halaman.';
   });
 </script>
 </body></html>

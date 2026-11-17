@@ -1,17 +1,12 @@
 # HospitalOps
 
-Ruang kerja sales dan marketing rumah sakit. Frontend statis dipublikasikan melalui GitHub Pages dari branch `main`. Firebase Authentication menggunakan email dan kata sandi. Data operasional disimpan di Cloud Firestore untuk masing-masing organisasi.
+HospitalOps mendukung operasional sales dan marketing rumah sakit. Halaman utama memakai Supabase Auth dan Database. Akses catatan dibatasi menurut keanggotaan organisasi. Pemilik bisa menambahkan UID akun Supabase sebagai Manager.
 
-## Akses organisasi
+- Halaman utama: `index.html`.
+- Demo dengan data simulasi dan penyimpanan browser: `demo.html`.
+- Halaman untuk mengakses akun dan data Firebase sebelumnya: `firebase-legacy.html`.
+- Skema Supabase untuk proyek baru: `hospitalops-schema.sql`. Migrasi ini sudah diterapkan pada proyek yang digunakan oleh situs.
+- Impor menerima XLSX, XLS, CSV, DOCX, dan PDF teks. Preview memperlihatkan kolom yang dipetakan dan baris bermasalah. File mentah diproses di browser, dan catatan yang disetujui disimpan ke organisasi yang aktif.
+- PKS/MoU menampilkan sisa hari serta riwayat perubahan dan perpanjangan.
 
-1. Daftar akun, lalu pilih **Buat organisasi** untuk memulai workspace kosong.
-2. Untuk menambahkan rekan, minta UID yang tampil pada halaman **Pilih organisasi** di akun reka​n. Pemilik workspace memasukkan UID tersebut dari tombol organisasi pada menu samping.
-3. Rekan memilih **Akses organisasi tim** dan memasukkan ID organisasi. Pemilik dan Manager dapat menjalankan modul operasional. Pemberian akses Manager tersedia bagi pemilik.
-4. Keluar dari akun melalui menu organisasi.
-
-## Konfigurasi
-
-- Firebase project `hospitalops-d9553`, Cloud Firestore Standard di Jakarta.
-- Publikasikan `firestore.rules` pada database default setiap kali aturan berubah. Perubahan pada GitHub Pages hanya memublikasikan frontend.
-- `firebase-config.js` berisi identitas publik Firebase Web SDK.
-- Data contoh dan data Excel tidak diimpor. Pengiriman pengingat email otomatis belum tersedia.
+Proyek Supabase perlu mengizinkan URL konfirmasi dan reset yang dipakai aplikasi, yaitu `https://dinsudiro.github.io/hospitalops/index.html` dan `https://dinsudiro.github.io/hospitalops/index.html?recovery=1`. Akun Firebase dan catatannya belum disalin ke Supabase.
