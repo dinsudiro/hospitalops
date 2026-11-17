@@ -29,13 +29,13 @@ function labeled(lines) {
  if(entry.size)records.push(entry);
  return records.length?[{name:'Teks berlabel',rows:[[...fields.values()],...records.map(row=>[...fields.keys()].map(col=>row.get(col)||''))]}]:[];
 }
-export async function readDocument(file) {
- if(!file?.size||file.size>MAX_FILE)throw new Error('Pilih file yang berisi data, dengan ukuran maksimal 10 MB.');
+export async function readDocument(file,{sheets,maxSize=MAX_FILE}={}) {
+ if(!file?.size||file.size>maxSize)throw new Error('Pilih file yang berisi data, dengan ukuran maksimal '+maxSize/1024/1024+' MB.');
  const kind=file.name.split('.').pop().toLowerCase();
  if(['xlsx','xls','csv'].includes(kind)){
   const lib=await script('./sheetjs-0.20.3.js','XLSX');
-  const book=lib.read(await file.arrayBuffer(),{cellDates:true,raw:true,codepage:65001});
-  return book.SheetNames.map(name=>({name,rows:compact(lib.utils.sheet_to_json(book.Sheets[name],{header:1,defval:'',raw:true}))}));
+  const book=lib.read(await file.arrayBuffer(),{cellDates:true,raw:true,codepage:65001,...(sheets?{sheets}:{})});
+  return book.SheetNames.filter(name=>book.Sheets[name]).map(name=>({name,rows:compact(lib.utils.sheet_to_json(book.Sheets[name],{header:1,defval:'',raw:true}))}));
  }
  if(kind==='docx'){
   const lib=await script('./mammoth-1.13.0.js','mammoth');
