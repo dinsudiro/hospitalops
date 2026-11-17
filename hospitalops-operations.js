@@ -1,9 +1,9 @@
 import {fieldsFor,guess,parseDate,prepareRows,readDocument} from './hospitalops-import.js';
 
+import {partnerTypes,referralTypes} from './hospitalops-b2b.js';
+
 const fields=['type','number','partner','name','scope','start','end','note'];
 const DAY=86400000;
-export const partnerTypes=['Perusahaan','Instansi','Lembaga','Rumah Sakit','Dokter Rujukan','Bidan Rujukan'];
-export const referralTypes=['Rujukan pasien langsung','Rujukan pemeriksaan ke RS Ummi'];
 const referralStatuses=['Diterima','Terjadwal','Selesai','Batal'];
 export function agreementStatus(record,today) {
  const version=[record,...(record.history||[])].find(v=>v.start<=today&&today<=v.end)||record;
@@ -71,16 +71,20 @@ export function createOperations(ui) {
   return heading('Rujukan Mitra','Catat rujukan pasien langsung dan rujukan pemeriksaan dari mitra ke RS Ummi.',button('Tambah rujukan','data-ops="referral-new"','plus',true))+
    panel('Daftar rujukan',rows.length+' catatan',table(['Mitra','Jenis rujukan','Layanan / pemeriksaan','Tanggal','Jumlah','Status'],body||'<tr><td colspan="6">Belum ada rujukan tercatat.</td></tr>'));
  }
- function referral(r) {
-  const controls='<div class="ops-grid">'+label('Nama mitra',input('name',r?.name,'text','required maxlength="140"'))+
+ function referral(r,context) {
+  const link=context||ui.referralContext(r?.opportunityId);
+  const identity=link?'<p class="sub">'+esc([link.name,link.partnerType,link.service,link.referralType].join(' · '))+'</p>':'<div class="ops-grid">'+
+   label('Nama mitra',input('name',r?.name,'text','required maxlength="140"'))+
    label('Jenis mitra',select('partnerType',[['','Pilih jenis mitra'],...partnerTypes],r?.partnerType||'','required'))+
    label('Jenis rujukan',select('referralType',[['','Pilih jenis rujukan'],...referralTypes],r?.referralType||'','required'))+
-   label('Layanan / pemeriksaan',input('service',r?.service,'text','required maxlength="140"'))+
+   label('Layanan / pemeriksaan',input('service',r?.service,'text','required maxlength="140"'))+'</div>';
+  const choices=(link?.sample||r?.status==='Sampel dikirim')?[...referralStatuses,'Sampel dikirim']:referralStatuses;
+  const controls=identity+'<div class="ops-grid">'+
    label('Tanggal rujukan',date('date',r?.date||today()))+
    label('Jumlah rujukan',input('count',r?.count??1,'number','required min="1" max="999999" step="1"'))+
-   label('Status',select('status',referralStatuses,r?.status||'Diterima'))+'</div>'+
+   label('Status',select('status',choices,r?.status||'Diterima'))+'</div>'+
    label('Catatan',text('note',r?.note));
-  show(r?'Edit rujukan':'Tambah rujukan',form('ops-referral',controls,'Simpan','data-ops-id="'+esc(r?.id||'')+'"'));
+  show(r?'Edit rujukan':'Tambah rujukan',form('ops-referral',controls,'Simpan','data-ops-id="'+esc(r?.id||'')+'" data-opportunity-id="'+esc(link?.opportunityId||'')+'"'));
  }
  function importView() {
   return heading('Impor Dokumen','Baca dokumen, cocokkan kolom, lalu periksa hasil sebelum menyimpan.')+
@@ -155,6 +159,10 @@ export function createOperations(ui) {
  }
  return {
   pksView,referralView,importView,change,
+  newReferral(id){
+   const link=ui.referralContext(id);
+   if(link&&!link.closed&&allowed(mod('referrals')))referral(null,link);
+  },
   click(d){
    if(d.ops==='import')return importDialog(d.opsId);
    if(d.ops==='template')return template();
@@ -178,15 +186,21 @@ export function createOperations(ui) {
     const rows=records('referrals');
     const old=rows.find(r=>r.id===f.dataset.opsId);
     if(f.dataset.opsId&&!old)throw new Error('Rujukan tidak ditemukan.');
-    const {partnerType,referralType,date,status}=values;
-    const name=values.name.trim(),service=values.service.trim(),count=Number(values.count);
+    const opportunityId=f.dataset.opportunityId||old?.opportunityId||'';
+    const link=opportunityId?ui.referralContext(opportunityId):null;
+    if(f.dataset.opportunityId&&(!link||(!old&&link.closed)))throw new Error('Peluang rujukan tidak tersedia.');
+    const {partnerType,referralType,name:rawName,service:rawService}=link||values;
+    const {date,status}=values, name=rawName.trim(),service=rawService.trim(),count=Number(values.count);
     if(!name||!service||!partnerTypes.includes(partnerType)||!referralTypes.includes(referralType)||
-      !referralStatuses.includes(status)||parseDate(date)!==date||!Number.isInteger(count)||count<1||count>999999){
+      (!referralStatuses.includes(status)&&!(status==='Sampel dikirim'&&(link?.sample||old?.status===status)))||parseDate(date)!==date||!Number.isInteger(count)||count<1||count>999999){
      throw new Error('Periksa kembali mitra, layanan, tanggal, dan jumlah rujukan.');
     }
-    const next={id:old?.id||unique(),name,partnerType,referralType,service,date,count,status,note:values.note.trim()};
+    if(opportunityId&&['Selesai','Sampel dikirim'].includes(status)&&(date>today()||link?.closed)){
+     throw new Error('Realisasi rujukan memerlukan peluang yang terbuka dan tanggal hingga hari ini.');
+    }
+    const next={id:old?.id||unique(),name,partnerType,referralType,service,date,count,status,note:values.note.trim(),...(opportunityId?{opportunityId}:{})};
     data().records.referrals=old?rows.map(r=>r.id===old.id?next:r):[...rows,next];
-    return {page:'referrals',message:'Rujukan tersimpan.'};
+    return {page:f.dataset.opportunityId&&!old?'pipeline':'referrals',opportunityId:f.dataset.opportunityId&&!old?opportunityId:'',message:'Rujukan tersimpan.'};
    }
    if(f.dataset.form==='ops-pks'){
     if(!allowed(mod('pks')))throw new Error('Modul dinonaktifkan.');

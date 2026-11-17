@@ -1,4 +1,5 @@
-import { createOperations, partnerTypes, referralTypes } from './hospitalops-operations.js';
+import { createOperations } from './hospitalops-operations.js';
+import { createB2B, pipelineStages } from './hospitalops-b2b.js';
 import {
  watchUser, login, register, logout, resetPassword, updatePassword, listOrganizations,
  createOrganization, joinOrganization, grantManager, loadOrganization, saveChanges
@@ -11,7 +12,7 @@ function icon(name){return '<svg class="icon icon-'+name+'" viewBox="0 0 24 24" 
 const previewRole='Manager';
 const modules=[
 ['overview','Ringkasan','home','Ruang kerja'],['import-doc','Impor Dokumen','content','Ruang kerja'],['pks','PKS / MoU','content','Sales & Relasi'],['calendar','Kalender Terpadu','calendar','Ruang kerja'],['tasks','Delegasi Tugas','tasks','Ruang kerja'],
-['pipeline','Pipeline Sales B2B','sales','Sales & Relasi',[4,7]],['referrals','Rujukan Mitra','people','Sales & Relasi',[4,7]],['canvass','Canvassing','pin','Sales & Relasi',[4]],['visits','Laporan Visit','content','Sales & Relasi',[4,7]],
+['partners','Mitra B2B','people','Sales & Relasi'],['pipeline','Pipeline Sales B2B','sales','Sales & Relasi',[4,7]],['referrals','Rujukan Mitra','people','Sales & Relasi',[4,7]],['canvass','Canvassing','pin','Sales & Relasi',[4]],['visits','Laporan Visit','content','Sales & Relasi',[4,7]],
 ['digital','Digital Marketing','digital','Digital Marketing',[1,6]],['leads','Leads Tracking','people','Digital Marketing',[1,6]],['spend','Kontrol Ads Spend','money','Digital Marketing',[1,6]],['conv','Konversi Ads','sales','Digital Marketing',[1,6]],['social','Planner Media Sosial','calendar','Digital Marketing',[1,2,5,6]],['articles','Planner Artikel Website','content','Digital Marketing',[1,2,6]],['promo','Jadwal Campaign Promo','digital','Digital Marketing',[1,2,4,6,7]],['video','Planner Produksi Video','video','Digital Marketing',[1,2,5,6]],
 ['events','Event Activation','calendar','Program & layanan',[3,4,5,6,7]],['pkrs','Planner Promkes','heart','Program & layanan',[3,5,6]],['mcu','Jadwal MCU Onsite','brand','Program & layanan',[4,7]],['out','Pasien Rawat Jalan','people','Pelaporan & analisis',[4]],['in','Pasien Rawat Inap','heart','Pelaporan & analisis',[4]],['report','Pelaporan','content','Pelaporan & analisis',[1,3,4,6,7]],['analysis','Analisis Kinerja','sales','Pelaporan & analisis',[1,6,7]],['settings','Pengaturan Modul','settings','Organisasi',[]]
 ];
@@ -57,7 +58,7 @@ function render(){
   document.querySelector('#sidebar').innerHTML='<div class="brand"><span class="logo">'+icon('brand')+'</span><div>HospitalOps<small>Sales & Marketing</small></div></div><button class="org" data-action="org"><span class="orgmark">'+initials(org().name)+'</span><span>'+esc(org().name)+'<small>Organisasi</small></span>'+icon('chev')+'</button><nav>'+groups.map(g=>'<span class="navlabel">'+esc(g.toUpperCase())+'</span>'+visible.filter(m=>m[3]===g).map(m=>'<button class="navbtn '+(page===m[0]?'active':'')+'" '+nav(m[0])+(page===m[0]?' aria-current="page"':'')+'>'+icon(m[2])+esc(m[1])+'</button>').join('')).join('')+'</nav><footer><div class="person"><span class="avatar" aria-hidden="true">'+initials(previewRole)+'</span><span>'+esc(previewRole)+'<small>Peran akun</small></span></div></footer>';
   document.querySelector('#topbar').innerHTML='<button class="iconbtn mobile" data-action="menu" aria-label="Buka menu">'+icon('menu')+'</button><div class="bread"><span>'+esc(org().name)+'</span><span>/</span><strong>'+esc(mod(page)[1])+'</strong></div><div class="tools"><span class="badge"><i class="dot"></i> Supabase</span><button class="iconbtn" data-action="notifications" aria-label="Pengaturan notifikasi">'+icon('bell')+'</button></div>';
   const content=document.querySelector('#content');
-  const views={overview,calendar,'import-doc':operations.importView,pks:operations.pksView,referrals:operations.referralView,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),out:()=>patientView('out'),in:()=>patientView('in'),report:()=>reportView(false),analysis:()=>reportView(true),settings};
+  const views={overview,calendar,'import-doc':operations.importView,pks:operations.pksView,referrals:operations.referralView,partners:b2b.partners,pipeline:b2b.view,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),out:()=>patientView('out'),in:()=>patientView('in'),report:()=>reportView(false),analysis:()=>reportView(true),settings};
   content.innerHTML=(views[page]||recordView)();
 }
 function heading(title,sub,actions='',tag=''){return '<div class="heading"><div>'+(tag?'<div class="eyebrow">'+esc(tag)+'</div>':'')+'<h1>'+esc(title)+'</h1><p class="sub">'+esc(sub)+'</p></div><div class="actions">'+actions+'</div></div>'}
@@ -74,7 +75,7 @@ function flow(){
 function overview(){
  const metrics=[
  ['Rawat Jalan',num(total('out')),'pasien tercatat','RJ','people','','out'],['Rawat Inap',num(total('in')),'pasien tercatat','RI','heart','blue','in'],
- ['Peluang Sales',num(periodRows('pipeline').filter(r=>r.status!=='Menang').length),'dalam periode','Aktif','sales','amber','pipeline'],['Belanja Iklan',money(adsTotal('spend')),'anggaran terpakai',percent(adsTotal('spend'),adsTotal('budget')),'money','purple','spend'],
+ ['Peluang Sales',num(periodRows('pipeline').filter(r=>!['Won','Lost'].includes(b2b.stage(r))).length),'dalam periode','Aktif','sales','amber','pipeline'],['Belanja Iklan',money(adsTotal('spend')),'anggaran terpakai',percent(adsTotal('spend'),adsTotal('budget')),'money','purple','spend'],
  ['Leads Tercatat',num(periodRows('leads').length),'dalam periode','Leads','people','','leads'],['Konversi Iklan',percent(adsTotal('booking'),adsTotal('leads')),'leads ke booking','Booking','sales','blue','conv'],['Tugas Aktif',num(periodRows('tasks').filter(r=>r.status!=='Selesai').length),'dalam periode','Tugas','tasks','amber','tasks'],['Agenda Terjadwal',num(agenda().length),'agenda terjadwal','Agenda','calendar','','calendar']
  ].filter(r=>allowed(mod(r[6]))).slice(0,4);
  const left=allowed(mod('out'))?chartPanel():panel('Tugas Tim','Daftar tugas tim',agendaList(records('tasks'),'tasks'),link('tasks'));
@@ -88,8 +89,8 @@ function chartPanel(){
  return panel('Kunjungan Pasien',care,value?'<p class="numeric">'+num(value)+' pasien tercatat</p>':'<div class="empty">Belum ada data kunjungan.</div>',tabs);
 }
 function pipelinePanel(){
- const rows=periodRows('pipeline'),counts=stages.map(s=>rows.filter(r=>r.status===s).length),colors=['#a6d9c8','#81cbb4','#52ae94','#258b72','#08765e'];
- return panel('Pipeline Sales','Peluang per tahap',stages.map((s,i)=>'<div class="stage"><div class="stage-label"><span>'+s+'</span><span>'+counts[i]+'</span></div><div class="track"><i style="background:'+colors[i]+';width:'+counts[i]/Math.max(rows.length,1)*100+'%"></i></div></div>').join(''),link('pipeline','Buka pipeline →'));
+ const rows=periodRows('pipeline'),counts=pipelineStages.map(s=>rows.filter(r=>b2b.stage(r)===s).length);
+ return panel('Pipeline Sales B2B','Peluang per tahap',pipelineStages.map((s,i)=>'<div class="stage"><div class="stage-label"><span>'+s+'</span><span>'+counts[i]+'</span></div><div class="track"><i style="background:'+(s==='Lost'?'#a3a9a7':'#258b72')+';width:'+counts[i]/Math.max(rows.length,1)*100+'%"></i></div></div>').join(''),link('pipeline','Buka pipeline →'));
 }
 function agenda(){
  return [...planIds,...data().custom.map(m=>m[0])].filter(id=>allowed(mod(id))).flatMap(id=>records(id).filter(r=>r.date&&r.status!=='Selesai').map(r=>({...r,module:id}))).sort((a,b)=>a.date.localeCompare(b.date));
@@ -109,16 +110,11 @@ function calendar(){
 const descriptions={pipeline:'Kelola peluang kerja sama dengan perusahaan, instansi, lembaga, rumah sakit, dokter, dan bidan rujukan.',leads:'Catat sumber lead, hubungkan ke campaign, dan pantau tindak lanjut.',canvass:'Rencanakan pendekatan dan kunjungan ke calon mitra B2B dan mitra rujukan.',visits:'Catat hasil kunjungan ke mitra, PIC, dan tindak lanjut.',digital:'Kelola pekerjaan digital dan hubungkan aktivitas ke campaign.',social:'Rencanakan konten media sosial, PIC, dan tanggal tayang.',articles:'Kelola penulisan, review, dan publikasi artikel website.',promo:'Atur jadwal campaign dan lihat aktivitas yang terhubung.',video:'Kelola brief, jadwal syuting, dan produksi video.',events:'Rencanakan aktivasi dan tindak lanjut acara.',pkrs:'Jadwalkan edukasi kesehatan dan kegiatan PKRS.',mcu:'Kelola jadwal dan koordinasi MCU onsite.',tasks:'Delegasikan tugas ke peran tim dan pantau tenggatnya.'};
 function recordView(){
  const id=page,title=mod(id)[1],rows=records(id);
- const stageOptions=id==='pipeline'?stages:statuses;
- return heading(title,descriptions[id]||'Kelola aktivitas organisasi dalam modul ini.',button(id==='tasks'?'Delegasikan tugas':id==='promo'?'Tambah campaign':'Tambah catatan','data-action="new"','plus',true))+panel(id==='pipeline'?'Tahap peluang':'Daftar aktivitas',num(rows.length)+' catatan', '<div class="filters"><input id="query" type="search" aria-label="Cari catatan" placeholder="Cari catatan…" value="'+esc(query)+'"><select id="statusFilter" aria-label="Filter status">'+options([['','Semua status'],...stageOptions],statusFilter)+'</select></div><div id="recordResults">'+recordResults()+'</div>');
+ return heading(title,descriptions[id]||'Kelola aktivitas organisasi dalam modul ini.',button(id==='tasks'?'Delegasikan tugas':id==='promo'?'Tambah campaign':'Tambah catatan','data-action="new"','plus',true))+panel('Daftar aktivitas',num(rows.length)+' catatan', '<div class="filters"><input id="query" type="search" aria-label="Cari catatan" placeholder="Cari catatan…" value="'+esc(query)+'"><select id="statusFilter" aria-label="Filter status">'+options([['','Semua status'],...statuses],statusFilter)+'</select></div><div id="recordResults">'+recordResults()+'</div>');
 }
 function recordResults(){
  const id=page,rows=records(id).filter(r=>(!statusFilter||r.status===statusFilter)&&[r.name,r.owner,r.source,r.partnerType,r.referralType,campaigns()[r.campaign]].join(' ').toLowerCase().includes(query.toLowerCase()));
  const action=r=>'data-edit="'+esc(r.id)+'" data-module="'+esc(id)+'"';
- if(id==='pipeline'){
-   const cols=statusFilter?[statusFilter]:stages;
-   return '<div class="board">'+cols.map(s=>'<div class="column"><h3>'+s+' · '+rows.filter(r=>r.status===s).length+'</h3>'+rows.filter(r=>r.status===s).map(r=>'<button class="boarditem" '+action(r)+'><strong>'+esc(r.name)+'</strong><small>'+esc(r.owner)+' · '+fmt(r.date)+'</small>'+(r.partnerType||r.referralType?'<small>'+esc([r.partnerType,r.referralType].filter(Boolean).join(' · '))+'</small>':'')+'</button>').join('')+'</div>').join('')+'</div>';
- }
  return rows.length?'<div class="tablewrap"><table><thead><tr><th>Aktivitas</th><th>PIC</th><th>Tanggal</th><th>Status</th><th>Campaign</th>'+'</tr></thead><tbody>'+rows.map(r=>'<tr><td><button class="rowbtn" '+action(r)+'>'+esc(r.name)+'</button></td><td>'+esc(r.owner)+'</td><td>'+fmt(r.date)+'</td><td>'+pill(r.status)+'</td><td>'+esc(campaigns()[r.campaign]||'–')+'</td>'+'</tr>').join('')+'</tbody></table></div>':'<div class="empty">Belum ada catatan yang cocok.</div>';
 }
 const leadViews=[
@@ -249,13 +245,13 @@ function reportView(analysis){
  const campaignEntries=Object.entries(campaigns());
  const [from,to]=dateWindow();
  const rows=campaignEntries.filter(([id])=>!campaignFilter||id===campaignFilter).map(([id,name])=>{
-  const linked=[...planIds,'leads','pipeline',...data().custom.map(m=>m[0])].filter(m=>allowed(mod(m))).flatMap(m=>periodRows(m).filter(r=>r.campaign===id).map(r=>({...r,module:m})));
+  const linked=[...planIds,'leads','pipeline',...data().custom.map(m=>m[0])].filter(m=>allowed(mod(m))).flatMap(m=>periodRows(m).filter(r=>r.campaign===id).map(r=>({...r,status:m==='pipeline'?b2b.stage(r):r.status,module:m})));
   const ads=data().ads.filter(a=>a.campaign===id);
   return {id,name,linked,ads,spend:ads.reduce((s,a)=>s+a.spend,0),budget:ads.reduce((s,a)=>s+a.budget,0),leads:ads.reduce((s,a)=>s+a.leads,0),bookings:ads.reduce((s,a)=>s+a.booking,0)};
  });
  const showAds=allowed(mod('spend'))||allowed(mod('conv'));
  const filters='<div class="filters"><select id="campaignFilter" aria-label="Filter campaign">'+options([['','Semua campaign'],...campaignEntries],campaignFilter)+'</select><select id="period" aria-label="Periode aktivitas">'+options(['Harian','Mingguan','Bulanan'],period)+'</select></div>';
- const body=analysis?'<div class="insights">'+rows.map(r=>'<div class="insight"><strong>'+esc(r.name)+'</strong><p class="sub">'+(showAds?'Konversi lead ke booking '+percent(r.bookings,r.leads)+' dari '+num(r.leads)+' lead iklan. Belanja '+percent(r.spend,r.budget)+' dari anggaran tercatat. ':'')+num(r.linked.filter(x=>x.status!=='Selesai'&&x.status!=='Menang').length)+' catatan aktif dalam periode terpilih.</p></div>').join('')+'</div>':table(['Campaign','Catatan terkait','Selesai / Menang',...(showAds?['Belanja iklan','Lead Ads','Booking Ads']:[])],rows.map(r=>'<tr><td><button class="rowbtn" data-campaign="'+esc(r.id)+'">'+esc(r.name)+'</button></td><td>'+num(r.linked.length)+'</td><td>'+num(r.linked.filter(x=>['Selesai','Menang'].includes(x.status)).length)+'</td>'+(showAds?'<td>'+money(r.spend)+'</td><td>'+num(r.leads)+'</td><td>'+num(r.bookings)+'</td>':'')+'</tr>').join(''));
+ const body=analysis?'<div class="insights">'+rows.map(r=>'<div class="insight"><strong>'+esc(r.name)+'</strong><p class="sub">'+(showAds?'Konversi lead ke booking '+percent(r.bookings,r.leads)+' dari '+num(r.leads)+' lead iklan. Belanja '+percent(r.spend,r.budget)+' dari anggaran tercatat. ':'')+num(r.linked.filter(x=>!['Selesai','Won','Lost'].includes(x.status)).length)+' catatan aktif dalam periode terpilih.</p></div>').join('')+'</div>':table(['Campaign','Catatan terkait','Selesai / Menang',...(showAds?['Belanja iklan','Lead Ads','Booking Ads']:[])],rows.map(r=>'<tr><td><button class="rowbtn" data-campaign="'+esc(r.id)+'">'+esc(r.name)+'</button></td><td>'+num(r.linked.length)+'</td><td>'+num(r.linked.filter(x=>['Selesai','Won'].includes(x.status)).length)+'</td>'+(showAds?'<td>'+money(r.spend)+'</td><td>'+num(r.leads)+'</td><td>'+num(r.bookings)+'</td>':'')+'</tr>').join(''));
  const details=campaignFilter?panel('Catatan Terhubung','Klik catatan untuk melihat detail dari modul asal.',table(['Aktivitas','Modul','Status'],rows.flatMap(r=>r.linked).map(r=>'<tr><td><button class="rowbtn" data-edit="'+esc(r.id)+'" data-module="'+esc(r.module)+'">'+esc(r.name)+'</button></td><td>'+esc(mod(r.module)[1])+'</td><td>'+pill(r.status)+'</td></tr>').join('')||'<tr><td colspan="3">Belum ada catatan di periode ini.</td></tr>')):'';
  return heading(analysis?'Analisis Kinerja':'Pelaporan','Evaluasi campaign dengan data aktivitas, pipeline, dan iklan yang terhubung.',allowed(mod('leads'))?button('Dashboard Leads',nav('leads'),'people'):'')+'<div class="list">'+panel('Rekap Campaign',fmt(from)+' – '+fmt(to),filters+body)+details+'</div>';
 }
@@ -263,8 +259,13 @@ function settings(){
  return heading('Pengaturan Modul','Aktifkan modul atau tambah modul sesuai kebutuhan organisasi.',button('Tambah modul','data-action="module"','plus',true))+panel('Modul Organisasi','Atur visibilitas menu untuk '+org().name+'.',[...modules,...data().custom].filter(m=>m[0]!=='overview'&&m[0]!=='settings').map(m=>'<div class="settings-row"><div><strong>'+esc(m[1])+'</strong><div class="sub">'+esc(m[3])+'</div></div><label><input type="checkbox" data-toggle-module="'+esc(m[0])+'" '+(!data().disabled.includes(m[0])?'checked':'')+'> Aktif</label></div>').join(''));
 }
 const modal=document.querySelector('#modal');
+const b2b=createB2B({records,data,active:id=>allowed(mod(id)),heading,panel,button,table,label,input,select,options,esc,fmt,
+  show,showWide:(title,body)=>{show(title,body);modal.classList.add('lead-dialog')},form,today:currentDate,unique,campaigns,
+  newReferral:id=>operations.newReferral(id),newMCU:id=>edit('mcu',undefined,id)
+});
 const operations=createOperations({allowed,mod,records,data,heading,panel,button,table,label,input,select,options,esc,fmt,show,form,render,
   today:currentDate,unique,campaigns,statuses,stages,
+  referralContext:b2b.referralContext,
   modules:()=>['leads','promo','social','pipeline',...planIds.filter(id=>!['promo','social'].includes(id)),...data().custom.map(m=>m[0])]
 });
 function show(title,body){
@@ -278,8 +279,9 @@ function form(kind,fields,submit='Simpan',meta=''){
 function label(l,content){return '<label>'+esc(l)+content+'</label>'}
 function input(name,val='',type='text',extra=''){return '<input name="'+name+'" type="'+type+'" value="'+esc(val)+'" '+extra+'>'}
 function select(name,items,value,extra=''){return '<select name="'+name+'" '+extra+'>'+options(items,value)+'</select>'}
-function edit(id,recordId){
+function edit(id,recordId,opportunityId){
  const m=mod(id);if(!allowed(m))return;
+ if(id==='pipeline')return b2b.edit(recordId);
  const r=records(id).find(row=>row.id===recordId);
  if(recordId&&!r)return;
  if(id==='leads'){
@@ -287,13 +289,13 @@ function edit(id,recordId){
   modal.classList.add('lead-dialog');
   return;
  }
- const isPipeline=id==='pipeline';
- const activityName=id==='tasks'?'Nama tugas':isPipeline?'Nama peluang / mitra':'Nama catatan';
- const partnerFields=isPipeline?
-  label('Jenis mitra',select('partnerType',[['','Pilih jenis mitra'],...partnerTypes],r?.partnerType||''))+
-  label('Jenis rujukan (opsional)',select('referralType',[['','Pilih jenis rujukan'],...referralTypes],r?.referralType||'')):'';
+ const activityName=id==='tasks'?'Nama tugas':'Nama catatan';
+ const mcuLink=id==='mcu'?b2b.mcuContext(opportunityId||r?.opportunityId):null;
+ if(opportunityId&&(!mcuLink||mcuLink.closed))return;
+ const mcuFields=id==='mcu'?(mcuLink?'<p class="sub">Peluang B2B · '+esc(mcuLink.partner)+' · '+esc(mcuLink.title)+'</p>':'')+
+  label('Jumlah peserta aktual',input('participants',r?.participants,'number','min="0" max="999999" step="1"')):'';
  const assigneeField=id==='tasks'?label('Nama PIC (opsional)',input('assignee',r?.owner,'text','maxlength="80"')):'';
- show((r?'Edit ':'Tambah ')+m[1],form('record',label(activityName,input('name',r?.name,'text','required maxlength="140"'))+assigneeField+partnerFields+label('Tanggal',input('date',r?.date||fixedDate,'date','required min="1900-01-01" max="2100-12-31"'))+label('Status',select('status',id==='pipeline'?stages:statuses,r?.status))+(id==='promo'?'':label('Campaign terkait',select('campaign',[['','Pilih campaign'],...Object.entries(campaigns())],r?.campaign||'')))+(id==='promo'?label('Objektif',input('objective',r?.objective,'text','maxlength="80"')):'')+label('Catatan / Tindak lanjut','<textarea name="note" maxlength="700">'+esc(r?.note)+'</textarea>'),'Simpan','data-module="'+esc(id)+'" data-id="'+esc(r?.id||'')+'"'));
+ show((r?'Edit ':'Tambah ')+m[1],form('record',label(activityName,input('name',r?.name??mcuLink?.title,'text','required maxlength="140"'))+assigneeField+mcuFields+label('Tanggal',input('date',r?.date||fixedDate,'date','required min="1900-01-01" max="2100-12-31"'))+label('Status',select('status',statuses,r?.status))+(id==='promo'?'':label('Campaign terkait',select('campaign',[['','Pilih campaign'],...Object.entries(campaigns())],r?.campaign||'')))+(id==='promo'?label('Objektif',input('objective',r?.objective,'text','maxlength="80"')):'')+label('Catatan / Tindak lanjut','<textarea name="note" maxlength="700">'+esc(r?.note)+'</textarea>'),'Simpan','data-module="'+esc(id)+'" data-id="'+esc(r?.id||'')+'" data-opportunity-id="'+esc(opportunityId||'')+'"'));
 }
 function editAds(id){
  const a=data().ads.find(r=>r.id===id);
@@ -458,6 +460,7 @@ document.addEventListener('click',async e=>{
   return;
  }
  if(!state.workspace&&b.dataset.action!=='close')return;
+ if(b.dataset.b2b){b2b.click(b.dataset);return}
  if(b.dataset.ops){operations.click(b.dataset);if(['import','detail'].includes(b.dataset.ops))modal.classList.add('lead-dialog');return}
  if(b.dataset.nav)goto(b.dataset.nav);
  if(b.dataset.action)action(b.dataset.action);
@@ -479,6 +482,7 @@ document.addEventListener('click',async e=>{
  }
 });
 document.addEventListener('input',e=>{
+ if(e.target.id==='b2b-query'){b2b.change(e.target);return}
  if(e.target.id==='leadQuery'){
   query=e.target.value;
   document.querySelector('#leadResults').innerHTML=leadResults();
@@ -490,7 +494,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',async e=>{
  const t=e.target;
- if(await operations.change(t))return;
+ if(b2b.change(t)||await operations.change(t))return;
  if(t.id==='leadMonth'&&t.value&&t.validity.valid){
   leadState.month=t.value;
   render();document.querySelector('#leadMonth').focus();
@@ -524,14 +528,14 @@ document.addEventListener('submit',async e=>{
  if(!workspace)return;
  const before=structuredClone(data());
  if(kind==='activity'){edit(v.module);return}
- if(['ops-pks','ops-referral','ops-import'].includes(kind)){
+ if(kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
   working=true;
   const submit=f.querySelector('button.primary');submit.disabled=true;
   try{
-   const result=operations.mutate(f,v);
+   const result=(kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
    await saveChanges(workspace,before);
    if(state.workspace!==workspace)return;
-   modal.close();goto(result.page);toast(result.message);
+   modal.close();goto(result.page);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message);
   }catch(error){workspace.data=before;if(state.workspace===workspace)cloudError(error)}
   finally{working=false;submit.disabled=false}
   return;
@@ -555,6 +559,21 @@ document.addEventListener('submit',async e=>{
   const {assignee,...values}=v;
   const owner=assignee?.trim()||existing?.owner||previewRole;
   const r={id:existing?.id||unique(),...values,name:v.name.trim(),owner};
+  if(id==='mcu'){
+   const linked=f.dataset.opportunityId||existing?.opportunityId;
+   const link=b2b.mcuContext(linked);
+   const count=v.participants===''?null:Number(v.participants);
+   const invalidLink=f.dataset.opportunityId&&(!link||link.closed);
+   const invalidCount=count!==null&&(!Number.isInteger(count)||count<0||count>999999);
+   const invalidCompletion=linked&&v.status==='Selesai'&&(link?.closed||!(count>0)||v.date>currentDate());
+   if(invalidLink||invalidCount||invalidCompletion){
+    const error=invalidLink?'Peluang MCU tidak tersedia.':'Untuk MCU terhubung yang selesai, isi jumlah peserta aktual dan tanggal hingga hari ini.';
+    modal.querySelector('#cloudError').textContent=error;
+    return;
+   }
+   r.participants=count;
+   if(linked)r.opportunityId=linked;
+  }
   if(id==='promo')r.campaign=existing?.campaign||r.id;
   if(id==='leads')r.billing=v.billing?Number(v.billing):null;
   data().records[id]=existing?rows.map(row=>row.id===r.id?r:row):[...rows,r];
