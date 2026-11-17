@@ -2,6 +2,9 @@ import {fieldsFor,guess,parseDate,prepareRows,readDocument} from './hospitalops-
 
 const fields=['type','number','partner','name','scope','start','end','note'];
 const DAY=86400000;
+export const partnerTypes=['Perusahaan','Instansi','Lembaga','Rumah Sakit','Dokter Rujukan','Bidan Rujukan'];
+export const referralTypes=['Rujukan pasien langsung','Rujukan pemeriksaan ke RS Ummi'];
+const referralStatuses=['Diterima','Terjadwal','Selesai','Batal'];
 export function agreementStatus(record,today) {
  const version=[record,...(record.history||[])].find(v=>v.start<=today&&today<=v.end)||record;
  const days=Math.round((Date.parse(version.end)-Date.parse(today))/DAY);
@@ -60,6 +63,24 @@ export function createOperations(ui) {
    label('Ruang lingkup',text('scope',r?.scope,true))+(r?label('Alasan '+change.toLowerCase(),text('reason','',true)):'')+
    label('Catatan',text('note',r?.note));
   show(r?'Catat '+change.toLowerCase():'Tambah PKS / MoU',form('ops-pks',controls,'Simpan','data-ops-id="'+esc(r?.id||'')+'" data-change="'+esc(change||'')+'"'));
+ }
+ function referralView() {
+  const rows=[...records('referrals')].sort((a,b)=>b.date.localeCompare(a.date));
+  const body=rows.map(r=>'<tr><td><button class="rowbtn" data-ops="referral-edit" data-ops-id="'+esc(r.id)+'">'+esc(r.name)+'</button><div class="sub">'+esc(r.partnerType)+'</div></td><td>'+
+   esc(r.referralType)+'</td><td>'+esc(r.service)+'</td><td>'+fmt(r.date)+'</td><td>'+esc(r.count)+'</td><td>'+esc(r.status)+'</td></tr>').join('');
+  return heading('Rujukan Mitra','Catat rujukan pasien langsung dan rujukan pemeriksaan dari mitra ke RS Ummi.',button('Tambah rujukan','data-ops="referral-new"','plus',true))+
+   panel('Daftar rujukan',rows.length+' catatan',table(['Mitra','Jenis rujukan','Layanan / pemeriksaan','Tanggal','Jumlah','Status'],body||'<tr><td colspan="6">Belum ada rujukan tercatat.</td></tr>'));
+ }
+ function referral(r) {
+  const controls='<div class="ops-grid">'+label('Nama mitra',input('name',r?.name,'text','required maxlength="140"'))+
+   label('Jenis mitra',select('partnerType',[['','Pilih jenis mitra'],...partnerTypes],r?.partnerType||'','required'))+
+   label('Jenis rujukan',select('referralType',[['','Pilih jenis rujukan'],...referralTypes],r?.referralType||'','required'))+
+   label('Layanan / pemeriksaan',input('service',r?.service,'text','required maxlength="140"'))+
+   label('Tanggal rujukan',date('date',r?.date||today()))+
+   label('Jumlah rujukan',input('count',r?.count??1,'number','required min="1" max="999999" step="1"'))+
+   label('Status',select('status',referralStatuses,r?.status||'Diterima'))+'</div>'+
+   label('Catatan',text('note',r?.note));
+  show(r?'Edit rujukan':'Tambah rujukan',form('ops-referral',controls,'Simpan','data-ops-id="'+esc(r?.id||'')+'"'));
  }
  function importView() {
   return heading('Impor Dokumen','Baca dokumen, cocokkan kolom, lalu periksa hasil sebelum menyimpan.')+
@@ -133,10 +154,17 @@ export function createOperations(ui) {
   link.href=url;link.download='hospitalops-'+current.id+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
  return {
-  pksView,importView,change,
+  pksView,referralView,importView,change,
   click(d){
    if(d.ops==='import')return importDialog(d.opsId);
    if(d.ops==='template')return template();
+   if(d.ops==='referral-new'||d.ops==='referral-edit'){
+    if(!allowed(mod('referrals')))return;
+    if(d.ops==='referral-new')return referral();
+    const row=records('referrals').find(r=>r.id===d.opsId);
+    if(row)return referral(row);
+    return;
+   }
    if(!allowed(mod('pks')))return;
    const r=find(d.opsId);
    if(d.ops==='new')agreement();
@@ -145,6 +173,21 @@ export function createOperations(ui) {
    if(d.ops==='extend'&&r)agreement(r,'Perpanjangan');
   },
   mutate(f,values){
+   if(f.dataset.form==='ops-referral'){
+    if(!allowed(mod('referrals')))throw new Error('Modul dinonaktifkan.');
+    const rows=records('referrals');
+    const old=rows.find(r=>r.id===f.dataset.opsId);
+    if(f.dataset.opsId&&!old)throw new Error('Rujukan tidak ditemukan.');
+    const {partnerType,referralType,date,status}=values;
+    const name=values.name.trim(),service=values.service.trim(),count=Number(values.count);
+    if(!name||!service||!partnerTypes.includes(partnerType)||!referralTypes.includes(referralType)||
+      !referralStatuses.includes(status)||parseDate(date)!==date||!Number.isInteger(count)||count<1||count>999999){
+     throw new Error('Periksa kembali mitra, layanan, tanggal, dan jumlah rujukan.');
+    }
+    const next={id:old?.id||unique(),name,partnerType,referralType,service,date,count,status,note:values.note.trim()};
+    data().records.referrals=old?rows.map(r=>r.id===old.id?next:r):[...rows,next];
+    return {page:'referrals',message:'Rujukan tersimpan.'};
+   }
    if(f.dataset.form==='ops-pks'){
     if(!allowed(mod('pks')))throw new Error('Modul dinonaktifkan.');
     const old=find(f.dataset.opsId), existing=records('pks');

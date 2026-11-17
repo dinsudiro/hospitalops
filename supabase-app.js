@@ -1,4 +1,4 @@
-import { createOperations } from './hospitalops-operations.js';
+import { createOperations, partnerTypes, referralTypes } from './hospitalops-operations.js';
 import {
  watchUser, login, register, logout, resetPassword, updatePassword, listOrganizations,
  createOrganization, joinOrganization, grantManager, loadOrganization, saveChanges
@@ -10,9 +10,9 @@ plus:'<path d="M12 5v14M5 12h14"/>',brand:'<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6
 function icon(name){return '<svg class="icon icon-'+name+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(drawings[name]||drawings.content)+'</svg>'}
 const previewRole='Manager';
 const modules=[
-['overview','Ringkasan','home','Ruang kerja'],['import-doc','Impor Dokumen','content','Ruang kerja'],['pks','PKS / MoU','content','Sales & relasi'],['calendar','Kalender Terpadu','calendar','Ruang kerja'],['tasks','Delegasi Tugas','tasks','Ruang kerja'],
-['pipeline','Pipeline Sales','sales','Sales & relasi',[4,7]],['leads','Leads Tracking','people','Sales & relasi',[1,4,7]],['canvass','Canvassing','pin','Sales & relasi',[4]],['visits','Laporan Visit','content','Sales & relasi',[4,7]],
-['digital','Digital Marketing','digital','Marketing & media',[1,6]],['spend','Kontrol Ads Spend','money','Marketing & media',[1,6]],['conv','Konversi Ads','sales','Marketing & media',[1,6]],['social','Planner Media Sosial','calendar','Marketing & media',[1,2,5,6]],['articles','Planner Artikel Website','content','Marketing & media',[1,2,6]],['promo','Jadwal Campaign Promo','digital','Marketing & media',[1,2,4,6,7]],['video','Planner Produksi Video','video','Marketing & media',[1,2,5,6]],
+['overview','Ringkasan','home','Ruang kerja'],['import-doc','Impor Dokumen','content','Ruang kerja'],['pks','PKS / MoU','content','Sales & Relasi'],['calendar','Kalender Terpadu','calendar','Ruang kerja'],['tasks','Delegasi Tugas','tasks','Ruang kerja'],
+['pipeline','Pipeline Sales B2B','sales','Sales & Relasi',[4,7]],['referrals','Rujukan Mitra','people','Sales & Relasi',[4,7]],['canvass','Canvassing','pin','Sales & Relasi',[4]],['visits','Laporan Visit','content','Sales & Relasi',[4,7]],
+['digital','Digital Marketing','digital','Digital Marketing',[1,6]],['leads','Leads Tracking','people','Digital Marketing',[1,6]],['spend','Kontrol Ads Spend','money','Digital Marketing',[1,6]],['conv','Konversi Ads','sales','Digital Marketing',[1,6]],['social','Planner Media Sosial','calendar','Digital Marketing',[1,2,5,6]],['articles','Planner Artikel Website','content','Digital Marketing',[1,2,6]],['promo','Jadwal Campaign Promo','digital','Digital Marketing',[1,2,4,6,7]],['video','Planner Produksi Video','video','Digital Marketing',[1,2,5,6]],
 ['events','Event Activation','calendar','Program & layanan',[3,4,5,6,7]],['pkrs','Planner Promkes','heart','Program & layanan',[3,5,6]],['mcu','Jadwal MCU Onsite','brand','Program & layanan',[4,7]],['out','Pasien Rawat Jalan','people','Pelaporan & analisis',[4]],['in','Pasien Rawat Inap','heart','Pelaporan & analisis',[4]],['report','Pelaporan','content','Pelaporan & analisis',[1,3,4,6,7]],['analysis','Analisis Kinerja','sales','Pelaporan & analisis',[1,6,7]],['settings','Pengaturan Modul','settings','Organisasi',[]]
 ];
 function campaigns(){return Object.fromEntries(records('promo').map(r=>[r.campaign||r.id,r.name]))}
@@ -57,7 +57,7 @@ function render(){
   document.querySelector('#sidebar').innerHTML='<div class="brand"><span class="logo">'+icon('brand')+'</span><div>HospitalOps<small>Sales & Marketing</small></div></div><button class="org" data-action="org"><span class="orgmark">'+initials(org().name)+'</span><span>'+esc(org().name)+'<small>Organisasi</small></span>'+icon('chev')+'</button><nav>'+groups.map(g=>'<span class="navlabel">'+esc(g.toUpperCase())+'</span>'+visible.filter(m=>m[3]===g).map(m=>'<button class="navbtn '+(page===m[0]?'active':'')+'" '+nav(m[0])+(page===m[0]?' aria-current="page"':'')+'>'+icon(m[2])+esc(m[1])+'</button>').join('')).join('')+'</nav><footer><div class="person"><span class="avatar" aria-hidden="true">'+initials(previewRole)+'</span><span>'+esc(previewRole)+'<small>Peran akun</small></span></div></footer>';
   document.querySelector('#topbar').innerHTML='<button class="iconbtn mobile" data-action="menu" aria-label="Buka menu">'+icon('menu')+'</button><div class="bread"><span>'+esc(org().name)+'</span><span>/</span><strong>'+esc(mod(page)[1])+'</strong></div><div class="tools"><span class="badge"><i class="dot"></i> Supabase</span><button class="iconbtn" data-action="notifications" aria-label="Pengaturan notifikasi">'+icon('bell')+'</button></div>';
   const content=document.querySelector('#content');
-  const views={overview,calendar,'import-doc':operations.importView,pks:operations.pksView,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),out:()=>patientView('out'),in:()=>patientView('in'),report:()=>reportView(false),analysis:()=>reportView(true),settings};
+  const views={overview,calendar,'import-doc':operations.importView,pks:operations.pksView,referrals:operations.referralView,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),out:()=>patientView('out'),in:()=>patientView('in'),report:()=>reportView(false),analysis:()=>reportView(true),settings};
   content.innerHTML=(views[page]||recordView)();
 }
 function heading(title,sub,actions='',tag=''){return '<div class="heading"><div>'+(tag?'<div class="eyebrow">'+esc(tag)+'</div>':'')+'<h1>'+esc(title)+'</h1><p class="sub">'+esc(sub)+'</p></div><div class="actions">'+actions+'</div></div>'}
@@ -106,18 +106,18 @@ function calendar(){
  const cells=Array.from({length:Math.ceil((shift+max)/7)*7},(_,i)=>{const d=i-shift+1;return d<1||d>max?'<div class="day dim"></div>':'<div class="day"><strong>'+d+'</strong>'+rows.filter(r=>Number(r.date.slice(-2))===d).map(r=>'<button class="mini" data-edit="'+esc(r.id)+'" data-module="'+esc(r.module)+'">'+esc(r.name)+'</button>').join('')+'</div>'}).join('');
  return heading('Kalender Terpadu','Jadwal lintas modul dalam organisasi.',button('Buat aktivitas','data-action="activity"','plus',true))+panel(label,num(rows.length)+' agenda terjadwal','<div class="cal">'+['Sen','Sel','Rab','Kam','Jum','Sab','Min'].map(d=>'<div class="cal-head">'+d+'</div>').join('')+cells+'</div>','<div class="actions">'+button('‹','data-month="-1" aria-label="Bulan sebelumnya"')+button('›','data-month="1" aria-label="Bulan berikutnya"')+'</div>');
 }
-const descriptions={pipeline:'Kelola prospek perusahaan, kemitraan, dan tindak lanjut tim.',leads:'Catat sumber lead, hubungkan ke campaign, dan pantau tindak lanjut.',canvass:'Rencanakan canvassing perusahaan dan institusi.',visits:'Catat hasil kunjungan, PIC, dan tindak lanjut lapangan.',digital:'Kelola pekerjaan digital dan hubungkan aktivitas ke campaign.',social:'Rencanakan konten media sosial, PIC, dan tanggal tayang.',articles:'Kelola penulisan, review, dan publikasi artikel website.',promo:'Atur jadwal campaign dan lihat aktivitas yang terhubung.',video:'Kelola brief, jadwal syuting, dan produksi video.',events:'Rencanakan aktivasi dan tindak lanjut acara.',pkrs:'Jadwalkan edukasi kesehatan dan kegiatan PKRS.',mcu:'Kelola jadwal dan koordinasi MCU onsite.',tasks:'Delegasikan tugas ke peran tim dan pantau tenggatnya.'};
+const descriptions={pipeline:'Kelola peluang kerja sama dengan perusahaan, instansi, lembaga, rumah sakit, dokter, dan bidan rujukan.',leads:'Catat sumber lead, hubungkan ke campaign, dan pantau tindak lanjut.',canvass:'Rencanakan pendekatan dan kunjungan ke calon mitra B2B dan mitra rujukan.',visits:'Catat hasil kunjungan ke mitra, PIC, dan tindak lanjut.',digital:'Kelola pekerjaan digital dan hubungkan aktivitas ke campaign.',social:'Rencanakan konten media sosial, PIC, dan tanggal tayang.',articles:'Kelola penulisan, review, dan publikasi artikel website.',promo:'Atur jadwal campaign dan lihat aktivitas yang terhubung.',video:'Kelola brief, jadwal syuting, dan produksi video.',events:'Rencanakan aktivasi dan tindak lanjut acara.',pkrs:'Jadwalkan edukasi kesehatan dan kegiatan PKRS.',mcu:'Kelola jadwal dan koordinasi MCU onsite.',tasks:'Delegasikan tugas ke peran tim dan pantau tenggatnya.'};
 function recordView(){
  const id=page,title=mod(id)[1],rows=records(id);
  const stageOptions=id==='pipeline'?stages:statuses;
  return heading(title,descriptions[id]||'Kelola aktivitas organisasi dalam modul ini.',button(id==='tasks'?'Delegasikan tugas':id==='promo'?'Tambah campaign':'Tambah catatan','data-action="new"','plus',true))+panel(id==='pipeline'?'Tahap peluang':'Daftar aktivitas',num(rows.length)+' catatan', '<div class="filters"><input id="query" type="search" aria-label="Cari catatan" placeholder="Cari catatan…" value="'+esc(query)+'"><select id="statusFilter" aria-label="Filter status">'+options([['','Semua status'],...stageOptions],statusFilter)+'</select></div><div id="recordResults">'+recordResults()+'</div>');
 }
 function recordResults(){
- const id=page,rows=records(id).filter(r=>(!statusFilter||r.status===statusFilter)&&[r.name,r.owner,r.source,campaigns()[r.campaign]].join(' ').toLowerCase().includes(query.toLowerCase()));
+ const id=page,rows=records(id).filter(r=>(!statusFilter||r.status===statusFilter)&&[r.name,r.owner,r.source,r.partnerType,r.referralType,campaigns()[r.campaign]].join(' ').toLowerCase().includes(query.toLowerCase()));
  const action=r=>'data-edit="'+esc(r.id)+'" data-module="'+esc(id)+'"';
  if(id==='pipeline'){
    const cols=statusFilter?[statusFilter]:stages;
-   return '<div class="board">'+cols.map(s=>'<div class="column"><h3>'+s+' · '+rows.filter(r=>r.status===s).length+'</h3>'+rows.filter(r=>r.status===s).map(r=>'<button class="boarditem" '+action(r)+'><strong>'+esc(r.name)+'</strong><small>'+esc(r.owner)+' · '+fmt(r.date)+'</small></button>').join('')+'</div>').join('')+'</div>';
+   return '<div class="board">'+cols.map(s=>'<div class="column"><h3>'+s+' · '+rows.filter(r=>r.status===s).length+'</h3>'+rows.filter(r=>r.status===s).map(r=>'<button class="boarditem" '+action(r)+'><strong>'+esc(r.name)+'</strong><small>'+esc(r.owner)+' · '+fmt(r.date)+'</small>'+(r.partnerType||r.referralType?'<small>'+esc([r.partnerType,r.referralType].filter(Boolean).join(' · '))+'</small>':'')+'</button>').join('')+'</div>').join('')+'</div>';
  }
  return rows.length?'<div class="tablewrap"><table><thead><tr><th>Aktivitas</th><th>PIC</th><th>Tanggal</th><th>Status</th><th>Campaign</th>'+'</tr></thead><tbody>'+rows.map(r=>'<tr><td><button class="rowbtn" '+action(r)+'>'+esc(r.name)+'</button></td><td>'+esc(r.owner)+'</td><td>'+fmt(r.date)+'</td><td>'+pill(r.status)+'</td><td>'+esc(campaigns()[r.campaign]||'–')+'</td>'+'</tr>').join('')+'</tbody></table></div>':'<div class="empty">Belum ada catatan yang cocok.</div>';
 }
@@ -287,9 +287,13 @@ function edit(id,recordId){
   modal.classList.add('lead-dialog');
   return;
  }
- const activityName=id==='tasks'?'Nama tugas':'Nama catatan';
+ const isPipeline=id==='pipeline';
+ const activityName=id==='tasks'?'Nama tugas':isPipeline?'Nama peluang / mitra':'Nama catatan';
+ const partnerFields=isPipeline?
+  label('Jenis mitra',select('partnerType',[['','Pilih jenis mitra'],...partnerTypes],r?.partnerType||''))+
+  label('Jenis rujukan (opsional)',select('referralType',[['','Pilih jenis rujukan'],...referralTypes],r?.referralType||'')):'';
  const assigneeField=id==='tasks'?label('Nama PIC (opsional)',input('assignee',r?.owner,'text','maxlength="80"')):'';
- show((r?'Edit ':'Tambah ')+m[1],form('record',label(activityName,input('name',r?.name,'text','required maxlength="140"'))+assigneeField+label('Tanggal',input('date',r?.date||fixedDate,'date','required min="1900-01-01" max="2100-12-31"'))+label('Status',select('status',id==='pipeline'?stages:statuses,r?.status))+(id==='promo'?'':label('Campaign terkait',select('campaign',[['','Pilih campaign'],...Object.entries(campaigns())],r?.campaign||'')))+(id==='promo'?label('Objektif',input('objective',r?.objective,'text','maxlength="80"')):'')+label('Catatan / Tindak lanjut','<textarea name="note" maxlength="700">'+esc(r?.note)+'</textarea>'),'Simpan','data-module="'+esc(id)+'" data-id="'+esc(r?.id||'')+'"'));
+ show((r?'Edit ':'Tambah ')+m[1],form('record',label(activityName,input('name',r?.name,'text','required maxlength="140"'))+assigneeField+partnerFields+label('Tanggal',input('date',r?.date||fixedDate,'date','required min="1900-01-01" max="2100-12-31"'))+label('Status',select('status',id==='pipeline'?stages:statuses,r?.status))+(id==='promo'?'':label('Campaign terkait',select('campaign',[['','Pilih campaign'],...Object.entries(campaigns())],r?.campaign||'')))+(id==='promo'?label('Objektif',input('objective',r?.objective,'text','maxlength="80"')):'')+label('Catatan / Tindak lanjut','<textarea name="note" maxlength="700">'+esc(r?.note)+'</textarea>'),'Simpan','data-module="'+esc(id)+'" data-id="'+esc(r?.id||'')+'"'));
 }
 function editAds(id){
  const a=data().ads.find(r=>r.id===id);
@@ -520,7 +524,7 @@ document.addEventListener('submit',async e=>{
  if(!workspace)return;
  const before=structuredClone(data());
  if(kind==='activity'){edit(v.module);return}
- if(['ops-pks','ops-import'].includes(kind)){
+ if(['ops-pks','ops-referral','ops-import'].includes(kind)){
   working=true;
   const submit=f.querySelector('button.primary');submit.disabled=true;
   try{
