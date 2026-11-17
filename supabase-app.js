@@ -1,3 +1,4 @@
+import {createPatients} from './hospitalops-patients.js';
 import { createOperations } from './hospitalops-operations.js';
 import { createB2B, pipelineStages } from './hospitalops-b2b.js';
 import {
@@ -14,7 +15,7 @@ const modules=[
 ['overview','Ringkasan','home','Ruang kerja'],['import-doc','Impor Dokumen','content','Ruang kerja'],['pks','PKS / MoU','content','Sales & Relasi'],['calendar','Kalender Terpadu','calendar','Ruang kerja'],['tasks','Delegasi Tugas','tasks','Ruang kerja'],
 ['partners','Mitra B2B','people','Sales & Relasi'],['pipeline','Pipeline Sales B2B','sales','Sales & Relasi',[4,7]],['referrals','Rujukan Mitra','people','Sales & Relasi',[4,7]],['canvass','Canvassing','pin','Sales & Relasi',[4]],['visits','Laporan Visit','content','Sales & Relasi',[4,7]],
 ['digital','Digital Marketing','digital','Digital Marketing',[1,6]],['leads','Leads Tracking','people','Digital Marketing',[1,6]],['spend','Kontrol Ads Spend','money','Digital Marketing',[1,6]],['conv','Konversi Ads','sales','Digital Marketing',[1,6]],['social','Planner Media Sosial','calendar','Digital Marketing',[1,2,5,6]],['articles','Planner Artikel Website','content','Digital Marketing',[1,2,6]],['promo','Jadwal Campaign Promo','digital','Digital Marketing',[1,2,4,6,7]],['video','Planner Produksi Video','video','Digital Marketing',[1,2,5,6]],
-['events','Event Activation','calendar','Program & layanan',[3,4,5,6,7]],['pkrs','Planner Promkes','heart','Program & layanan',[3,5,6]],['mcu','Jadwal MCU Onsite','brand','Program & layanan',[4,7]],['out','Pasien Rawat Jalan','people','Pelaporan & analisis',[4]],['in','Pasien Rawat Inap','heart','Pelaporan & analisis',[4]],['report','Pelaporan','content','Pelaporan & analisis',[1,3,4,6,7]],['analysis','Analisis Kinerja','sales','Pelaporan & analisis',[1,6,7]],['settings','Pengaturan Modul','settings','Organisasi',[]]
+['events','Event Activation','calendar','Program & layanan',[3,4,5,6,7]],['pkrs','Planner Promkes','heart','Program & layanan',[3,5,6]],['mcu','Jadwal MCU Onsite','brand','Program & layanan',[4,7]],['patients','Data Pasien','people','Pelaporan & analisis',[4]],['report','Pelaporan','content','Pelaporan & analisis',[1,3,4,6,7]],['analysis','Analisis Kinerja','sales','Pelaporan & analisis',[1,6,7]],['settings','Pengaturan Modul','settings','Organisasi',[]]
 ];
 function campaigns(){return Object.fromEntries(records('promo').map(r=>[r.campaign||r.id,r.name]))}
 const planIds=['canvass','visits','digital','social','articles','promo','video','events','pkrs','mcu','tasks'];
@@ -58,16 +59,19 @@ function render(){
   document.querySelector('#sidebar').innerHTML='<div class="brand"><span class="logo">'+icon('brand')+'</span><div>HospitalOps<small>Sales & Marketing</small></div></div><button class="org" data-action="org"><span class="orgmark">'+initials(org().name)+'</span><span>'+esc(org().name)+'<small>Organisasi</small></span>'+icon('chev')+'</button><nav>'+groups.map(g=>'<span class="navlabel">'+esc(g.toUpperCase())+'</span>'+visible.filter(m=>m[3]===g).map(m=>'<button class="navbtn '+(page===m[0]?'active':'')+'" '+nav(m[0])+(page===m[0]?' aria-current="page"':'')+'>'+icon(m[2])+esc(m[1])+'</button>').join('')).join('')+'</nav><footer><div class="person"><span class="avatar" aria-hidden="true">'+initials(previewRole)+'</span><span>'+esc(previewRole)+'<small>Peran akun</small></span></div></footer>';
   document.querySelector('#topbar').innerHTML='<button class="iconbtn mobile" data-action="menu" aria-label="Buka menu">'+icon('menu')+'</button><div class="bread"><span>'+esc(org().name)+'</span><span>/</span><strong>'+esc(mod(page)[1])+'</strong></div><div class="tools"><span class="badge"><i class="dot"></i> Supabase</span><button class="iconbtn" data-action="notifications" aria-label="Pengaturan notifikasi">'+icon('bell')+'</button></div>';
   const content=document.querySelector('#content');
-  const views={overview,calendar,'import-doc':operations.importView,pks:operations.pksView,referrals:operations.referralView,partners:b2b.partners,pipeline:b2b.view,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),out:()=>patientView('out'),in:()=>patientView('in'),report:()=>reportView(false),analysis:()=>reportView(true),settings};
+  const views={overview,patients:patientData.view,calendar,'import-doc':operations.importView,pks:operations.pksView,referrals:operations.referralView,partners:b2b.partners,pipeline:b2b.view,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),report:()=>reportView(false),analysis:()=>reportView(true),settings};
   content.innerHTML=(views[page]||recordView)();
 }
 function heading(title,sub,actions='',tag=''){return '<div class="heading"><div>'+(tag?'<div class="eyebrow">'+esc(tag)+'</div>':'')+'<h1>'+esc(title)+'</h1><p class="sub">'+esc(sub)+'</p></div><div class="actions">'+actions+'</div></div>'}
 function panel(title,sub,body,action=''){return '<section class="panel card"><div class="panel-head"><div><h2>'+esc(title)+'</h2><p class="sub">'+esc(sub)+'</p></div>'+action+'</div>'+body+'</section>'}
 function link(id,label='Lihat semua →'){return allowed(mod(id))?'<button class="link" '+nav(id)+'>'+esc(label)+'</button>':''}
-function total(type){return data().patients[type].reduce((sum,r)=>sum+r[4],0)}
+function total(type){
+ if(patientData.all().length)return patientData.all().filter(r=>type==='in'?['RAWAT INAP','ICU','PICU','NICU DAN PERINA II'].includes(r[7].toUpperCase()):
+  ['RAWAT JALAN','REHABILITASI MEDIK','MCU DAN VAKSIN'].includes(r[7].toUpperCase())).length;
+ return data().patients[type].reduce((sum,r)=>sum+r[4],0)}
 function adsTotal(field){return data().ads.reduce((acc,r)=>acc+r[field],0)}
 function periodRows(id){const [start,end]=dateWindow();return records(id).filter(r=>r.date>=start&&r.date<=end)}
-function metric(label,value,detail,change,ic,color,id){return '<button class="card metric" '+nav(id)+'><div class="metric-top">'+esc(label)+'<span class="tile-icon '+color+'">'+icon(ic)+'</span></div><b>'+esc(value)+'</b><div class="metric-foot"><span class="pill">'+esc(change)+'</span>'+esc(detail)+'</div></button>'}
+function metric(label,value,detail,change,ic,color,id){if(id==='out'||id==='in')id='patients';return '<button class="card metric" '+nav(id)+'><div class="metric-top">'+esc(label)+'<span class="tile-icon '+color+'">'+icon(ic)+'</span></div><b>'+esc(value)+'</b><div class="metric-foot"><span class="pill">'+esc(change)+'</span>'+esc(detail)+'</div></button>'}
 function flow(){
  const steps=[['Plan','Jadwal & agenda','calendar','calendar'],['Eksekusi','Delegasi & tindak lanjut','tasks','tasks'],['Reporting','Rekap hasil','content','report'],['Analyzing','Evaluasi kinerja','sales','analysis']];
  return '<section class="workflow"><div class="workflow-title">'+icon('flow')+'Alur kerja tim</div><div class="steps">'+steps.filter(s=>allowed(mod(s[3]))).map(([title,sub,ic,id])=>'<button class="step" '+nav(id)+'>'+icon(ic)+'<span><strong>'+title+'</strong><small>'+sub+'</small></span>'+icon('arrow')+'</button>').join('')+'</div></section>';
@@ -77,14 +81,14 @@ function overview(){
  ['Rawat Jalan',num(total('out')),'pasien tercatat','RJ','people','','out'],['Rawat Inap',num(total('in')),'pasien tercatat','RI','heart','blue','in'],
  ['Peluang Sales',num(periodRows('pipeline').filter(r=>!['Won','Lost'].includes(b2b.stage(r))).length),'dalam periode','Aktif','sales','amber','pipeline'],['Belanja Iklan',money(adsTotal('spend')),'anggaran terpakai',percent(adsTotal('spend'),adsTotal('budget')),'money','purple','spend'],
  ['Leads Tercatat',num(periodRows('leads').length),'dalam periode','Leads','people','','leads'],['Konversi Iklan',percent(adsTotal('booking'),adsTotal('leads')),'leads ke booking','Booking','sales','blue','conv'],['Tugas Aktif',num(periodRows('tasks').filter(r=>r.status!=='Selesai').length),'dalam periode','Tugas','tasks','amber','tasks'],['Agenda Terjadwal',num(agenda().length),'agenda terjadwal','Agenda','calendar','','calendar']
- ].filter(r=>allowed(mod(r[6]))).slice(0,4);
- const left=allowed(mod('out'))?chartPanel():panel('Tugas Tim','Daftar tugas tim',agendaList(records('tasks'),'tasks'),link('tasks'));
+ ].filter(r=>allowed(mod(['out','in'].includes(r[6])?'patients':r[6]))).slice(0,4);
+ const left=allowed(mod('patients'))?chartPanel():panel('Tugas Tim','Daftar tugas tim',agendaList(records('tasks'),'tasks'),link('tasks'));
  const right=allowed(mod('pipeline'))?pipelinePanel():panel('Agenda Mendatang','Kalender program dan campaign',agendaList(agenda(),''),link('calendar'));
- return heading('Ringkasan Operasional','Pantau penjualan, marketing, dan aktivitas tim '+org().name+'.','<select class="inline-select" id="period" aria-label="Periode aktivitas">'+options(['Harian','Mingguan','Bulanan'],period)+'</select>'+button('Buat aktivitas','data-action="activity"','plus',true),'RUANG KERJA')+flow()+'<section class="metrics">'+metrics.map(r=>metric(...r)).join('')+'</section><div class="grid">'+left+right+'</div>'+(allowed(mod('out'))||allowed(mod('pipeline'))?'<div class="grid">'+panel('Agenda Mendatang','Jadwal program dan campaign',agendaList(agenda(),''),link('calendar'))+panel('Tugas Tim','Delegasi dan tenggat',agendaList(records('tasks'),'tasks'),link('tasks'))+'</div>':'');
+ return heading('Ringkasan Operasional','Pantau penjualan, marketing, dan aktivitas tim '+org().name+'.','<select class="inline-select" id="period" aria-label="Periode aktivitas">'+options(['Harian','Mingguan','Bulanan'],period)+'</select>'+button('Buat aktivitas','data-action="activity"','plus',true),'RUANG KERJA')+flow()+'<section class="metrics">'+metrics.map(r=>metric(...r)).join('')+'</section><div class="grid">'+left+right+'</div>'+(allowed(mod('patients'))||allowed(mod('pipeline'))?'<div class="grid">'+panel('Agenda Mendatang','Jadwal program dan campaign',agendaList(agenda(),''),link('calendar'))+panel('Tugas Tim','Delegasi dan tenggat',agendaList(records('tasks'),'tasks'),link('tasks'))+'</div>':'');
 }
 function chartPanel(){
  const care=chartType==='out'?'Rawat Jalan':'Rawat Inap';
- const tabs='<div class="chart-toggle">'+[['out','Rawat Jalan'],['in','Rawat Inap']].filter(([id])=>allowed(mod(id))).map(([k,l])=>'<button type="button" data-chart="'+k+'" class="'+(chartType===k?'on':'')+'" aria-pressed="'+(chartType===k)+'">'+l+'</button>').join('')+'</div>';
+ const tabs='<div class="chart-toggle">'+[['out','Rawat Jalan'],['in','Rawat Inap']].filter(([id])=>allowed(mod('patients'))).map(([k,l])=>'<button type="button" data-chart="'+k+'" class="'+(chartType===k?'on':'')+'" aria-pressed="'+(chartType===k)+'">'+l+'</button>').join('')+'</div>';
  const value=total(chartType);
  return panel('Kunjungan Pasien',care,value?'<p class="numeric">'+num(value)+' pasien tercatat</p>':'<div class="empty">Belum ada data kunjungan.</div>',tabs);
 }
@@ -234,12 +238,6 @@ function adsView(conversion){
 function table(titles,rows){
  return '<div class="tablewrap"><table><thead><tr>'+titles.map(t=>'<th>'+esc(t)+'</th>').join('')+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
-function patientView(type){
- const source=data().patients[type],cols=type==='out'?[[0,'Poli'],[3,'Grup Jaminan']]:[[1,'Dokter'],[2,'Tindakan'],[3,'Grup Jaminan']];
- const filters=cols.map(([i,l])=>'<select aria-label="'+l+'" data-patient-filter="'+i+'">'+options([['','Semua '+l],...new Set(source.map(r=>r[i]))],patientFilters[i]||'')+'</select>').join('');
- const rows=source.filter(r=>cols.every(([i])=>!patientFilters[i]||r[i]===patientFilters[i]));
- return heading(mod(page)[1],'Rekap agregat kunjungan pasien')+panel(num(rows.reduce((s,r)=>s+r[4],0))+' pasien','Hasil sesuai filter', '<div class="filters">'+filters+'</div>'+table(['Poli','Dokter','Tindakan','Grup Jaminan','Pasien'],rows.map(r=>'<tr>'+r.map((v,i)=>'<td>'+esc(i===4?num(v):v)+'</td>').join('')+'</tr>').join('')||'<tr><td colspan="5">Tidak ada hasil.</td></tr>'));
-}
 let campaignFilter='';
 function reportView(analysis){
  const campaignEntries=Object.entries(campaigns());
@@ -259,6 +257,8 @@ function settings(){
  return heading('Pengaturan Modul','Aktifkan modul atau tambah modul sesuai kebutuhan organisasi.',button('Tambah modul','data-action="module"','plus',true))+panel('Modul Organisasi','Atur visibilitas menu untuk '+org().name+'.',[...modules,...data().custom].filter(m=>m[0]!=='overview'&&m[0]!=='settings').map(m=>'<div class="settings-row"><div><strong>'+esc(m[1])+'</strong><div class="sub">'+esc(m[3])+'</div></div><label><input type="checkbox" data-toggle-module="'+esc(m[0])+'" '+(!data().disabled.includes(m[0])?'checked':'')+'> Aktif</label></div>').join(''));
 }
 const modal=document.querySelector('#modal');
+const patientData=createPatients({records,data,heading,panel,button,table,esc,show,form,fmt,money,options,unique,
+  demo:false,wide:()=>modal.classList.add('lead-dialog')});
 const b2b=createB2B({records,data,active:id=>allowed(mod(id)),heading,panel,button,table,label,input,select,options,esc,fmt,
   show,showWide:(title,body)=>{show(title,body);modal.classList.add('lead-dialog')},form,today:currentDate,unique,campaigns,
   newReferral:id=>operations.newReferral(id),newMCU:id=>edit('mcu',undefined,id)
@@ -460,6 +460,7 @@ document.addEventListener('click',async e=>{
   return;
  }
  if(!state.workspace&&b.dataset.action!=='close')return;
+ if(b.dataset.patients){patientData.click(b.dataset);return}
  if(b.dataset.b2b){b2b.click(b.dataset);return}
  if(b.dataset.ops){operations.click(b.dataset);if(['import','detail'].includes(b.dataset.ops))modal.classList.add('lead-dialog');return}
  if(b.dataset.nav)goto(b.dataset.nav);
@@ -482,6 +483,7 @@ document.addEventListener('click',async e=>{
  }
 });
 document.addEventListener('input',e=>{
+ if(e.target.id==='patients-query'){patientData.change(e.target);return}
  if(e.target.id==='b2b-query'){b2b.change(e.target);return}
  if(e.target.id==='leadQuery'){
   query=e.target.value;
@@ -494,7 +496,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',async e=>{
  const t=e.target;
- if(b2b.change(t)||await operations.change(t))return;
+ if(await patientData.change(t)||b2b.change(t)||await operations.change(t))return;
  if(t.id==='leadMonth'&&t.value&&t.validity.valid){
   leadState.month=t.value;
   render();document.querySelector('#leadMonth').focus();
@@ -528,11 +530,11 @@ document.addEventListener('submit',async e=>{
  if(!workspace)return;
  const before=structuredClone(data());
  if(kind==='activity'){edit(v.module);return}
- if(kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
+ if(kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
   working=true;
   const submit=f.querySelector('button.primary');submit.disabled=true;
   try{
-   const result=(kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
+   const result=(kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
    await saveChanges(workspace,before);
    if(state.workspace!==workspace)return;
    modal.close();goto(result.page);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message);
