@@ -1,3 +1,5 @@
+import {createLabTariffs} from './hospitalops-lab-tariffs.js';
+import {createDirectory} from './hospitalops-directory.js';
 import {createVisuals} from './hospitalops-visuals.js';
 import {createPatients} from './hospitalops-patients.js';
 import { createOperations } from './hospitalops-operations.js';
@@ -16,7 +18,7 @@ const modules=[
 ['overview','Ringkasan','home','Ruang kerja'],['import-doc','Impor Dokumen','content','Ruang kerja'],['pks','PKS / MoU','content','Sales & Relasi'],['calendar','Kalender Terpadu','calendar','Ruang kerja'],['tasks','Delegasi Tugas','tasks','Ruang kerja'],
 ['partners','Mitra B2B','people','Sales & Relasi'],['pipeline','Pipeline Sales B2B','sales','Sales & Relasi',[4,7]],['referrals','Rujukan Mitra','people','Sales & Relasi',[4,7]],['canvass','Canvassing','pin','Sales & Relasi',[4]],['visits','Laporan Visit','content','Sales & Relasi',[4,7]],
 ['digital','Digital Marketing','digital','Digital Marketing',[1,6]],['leads','Leads Tracking','people','Digital Marketing',[1,6]],['spend','Kontrol Ads Spend','money','Digital Marketing',[1,6]],['conv','Konversi Ads','sales','Digital Marketing',[1,6]],['social','Planner Media Sosial','calendar','Digital Marketing',[1,2,5,6]],['articles','Planner Artikel Website','content','Digital Marketing',[1,2,6]],['promo','Jadwal Campaign Promo','digital','Digital Marketing',[1,2,4,6,7]],['video','Planner Produksi Video','video','Digital Marketing',[1,2,5,6]],
-['events','Event Activation','calendar','Program & layanan',[3,4,5,6,7]],['pkrs','Planner Promkes','heart','Program & layanan',[3,5,6]],['mcu','Jadwal MCU Onsite','brand','Program & layanan',[4,7]],['patients','Data Pasien','people','Pelaporan & analisis',[4]],['visuals','Visualisasi Data','sales','Pelaporan & analisis'],['report','Pelaporan','content','Pelaporan & analisis',[1,3,4,6,7]],['analysis','Analisis Kinerja','sales','Pelaporan & analisis',[1,6,7]],['settings','Pengaturan Modul','settings','Organisasi',[]]
+['events','Event Activation','calendar','Program & layanan',[3,4,5,6,7]],['pkrs','Planner Promkes','heart','Program & layanan',[3,5,6]],['mcu','Jadwal MCU Onsite','brand','Program & layanan',[4,7]],['directory','Ref Direktori','content','Organisasi'],['lab-tariffs','Tarif Lab B2B','money','Organisasi'],['patients','Data Pasien','people','Pelaporan & analisis',[4]],['visuals','Visualisasi Data','sales','Pelaporan & analisis'],['report','Pelaporan','content','Pelaporan & analisis',[1,3,4,6,7]],['analysis','Analisis Kinerja','sales','Pelaporan & analisis',[1,6,7]],['settings','Pengaturan Modul','settings','Organisasi',[]]
 ];
 function campaigns(){return Object.fromEntries(records('promo').map(r=>[r.campaign||r.id,r.name]))}
 const planIds=['canvass','visits','digital','social','articles','promo','video','events','pkrs','mcu','tasks'];
@@ -60,7 +62,7 @@ function render(){
   document.querySelector('#sidebar').innerHTML='<div class="brand"><span class="logo">'+icon('brand')+'</span><div>HospitalOps<small>Sales & Marketing</small></div></div><button class="org" data-action="org"><span class="orgmark">'+initials(org().name)+'</span><span>'+esc(org().name)+'<small>Organisasi</small></span>'+icon('chev')+'</button><nav>'+groups.map(g=>'<span class="navlabel">'+esc(g.toUpperCase())+'</span>'+visible.filter(m=>m[3]===g).map(m=>'<button class="navbtn '+(page===m[0]?'active':'')+'" '+nav(m[0])+(page===m[0]?' aria-current="page"':'')+'>'+icon(m[2])+esc(m[1])+'</button>').join('')).join('')+'</nav><footer><div class="person"><span class="avatar" aria-hidden="true">'+initials(previewRole)+'</span><span>'+esc(previewRole)+'<small>Peran akun</small></span></div></footer>';
   document.querySelector('#topbar').innerHTML='<button class="iconbtn mobile" data-action="menu" aria-label="Buka menu">'+icon('menu')+'</button><div class="bread"><span>'+esc(org().name)+'</span><span>/</span><strong>'+esc(mod(page)[1])+'</strong></div><div class="tools"><span class="badge"><i class="dot"></i> Supabase</span><button class="iconbtn" data-action="notifications" aria-label="Pengaturan notifikasi">'+icon('bell')+'</button></div>';
   const content=document.querySelector('#content');
-  const views={overview,patients:patientData.view,visuals:visuals.view,calendar,'import-doc':operations.importView,pks:operations.pksView,referrals:operations.referralView,partners:b2b.partners,pipeline:b2b.view,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),report:()=>reportView(false),analysis:()=>reportView(true),settings};
+  const views={overview,patients:patientData.view,directory:directory.view,'lab-tariffs':labTariffs.view,visuals:visuals.view,calendar,'import-doc':operations.importView,pks:operations.pksView,referrals:operations.referralView,partners:b2b.partners,pipeline:b2b.view,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),report:()=>reportView(false),analysis:()=>reportView(true),settings};
   content.innerHTML=(views[page]||recordView)();
 }
 function heading(title,sub,actions='',tag=''){return '<div class="heading"><div>'+(tag?'<div class="eyebrow">'+esc(tag)+'</div>':'')+'<h1>'+esc(title)+'</h1><p class="sub">'+esc(sub)+'</p></div><div class="actions">'+actions+'</div></div>'}
@@ -258,9 +260,12 @@ function settings(){
  return heading('Pengaturan Modul','Aktifkan modul atau tambah modul sesuai kebutuhan organisasi.',button('Tambah modul','data-action="module"','plus',true))+panel('Modul Organisasi','Atur visibilitas menu untuk '+org().name+'.',[...modules,...data().custom].filter(m=>m[0]!=='overview'&&m[0]!=='settings').map(m=>'<div class="settings-row"><div><strong>'+esc(m[1])+'</strong><div class="sub">'+esc(m[3])+'</div></div><label><input type="checkbox" data-toggle-module="'+esc(m[0])+'" '+(!data().disabled.includes(m[0])?'checked':'')+'> Aktif</label></div>').join(''));
 }
 const modal=document.querySelector('#modal');
-const patientData=createPatients({records,data,heading,panel,button,table,esc,show,form,fmt,money,options,unique,
+const labTariffs=createLabTariffs({records,data,heading,panel,button,table,esc,label,input,select,show,form,money,unique});
+const directory=createDirectory({records,data,heading,panel,button,table,esc,label,input,show,form,
+ wide:()=>modal.classList.add('lead-dialog'),enrichLab:labTariffs.enrich});
+const patientData=createPatients({records,data,heading,panel,button,table,esc,show,form,fmt,money,options,unique,enrich:directory.patients,
   demo:false,wide:()=>modal.classList.add('lead-dialog')});
-const visuals=createVisuals({rows:()=>patientData.all(),records,data,heading,panel,button,table,label,input,select,options,esc,show,form,money,unique,
+const visuals=createVisuals({rows:()=>directory.patients(patientData.all()),records,data,heading,panel,button,table,label,input,select,options,esc,show,form,money,unique,
  wide:()=>modal.classList.add('lead-dialog')});
 const b2b=createB2B({records,data,active:id=>allowed(mod(id)),heading,panel,button,table,label,input,select,options,esc,fmt,
   show,showWide:(title,body)=>{show(title,body);modal.classList.add('lead-dialog')},form,today:currentDate,unique,campaigns,
@@ -463,6 +468,8 @@ document.addEventListener('click',async e=>{
   return;
  }
  if(!state.workspace&&b.dataset.action!=='close')return;
+ if(b.dataset.labTariff){labTariffs.click(b.dataset);return}
+ if(b.dataset.directory){directory.click(b.dataset);return}
  if(b.dataset.visual){visuals.click(b.dataset);return}
  if(b.dataset.patients){patientData.click(b.dataset);return}
  if(b.dataset.b2b){b2b.click(b.dataset);return}
@@ -487,6 +494,7 @@ document.addEventListener('click',async e=>{
  }
 });
 document.addEventListener('input',e=>{
+ if(e.target.id==='directory-query'){directory.change(e.target);return}
  if(visuals.change(e.target))return;
  if(e.target.id==='patients-query'){patientData.change(e.target);return}
  if(e.target.id==='b2b-query'){b2b.change(e.target);return}
@@ -501,7 +509,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',async e=>{
  const t=e.target;
- if(visuals.change(t)||await patientData.change(t)||b2b.change(t)||await operations.change(t))return;
+ if(await directory.change(t)||visuals.change(t)||await patientData.change(t)||b2b.change(t)||await operations.change(t))return;
  if(t.id==='leadMonth'&&t.value&&t.validity.valid){
   leadState.month=t.value;
   render();document.querySelector('#leadMonth').focus();
@@ -535,11 +543,11 @@ document.addEventListener('submit',async e=>{
  if(!workspace)return;
  const before=structuredClone(data());
  if(kind==='activity'){edit(v.module);return}
- if(kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
+ if(kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
   working=true;
   const submit=f.querySelector('button.primary');submit.disabled=true;
   try{
-   const result=(kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
+   const result=(kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
    await saveChanges(workspace,before);
    if(state.workspace!==workspace)return;
    modal.close();goto(result.page);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message);

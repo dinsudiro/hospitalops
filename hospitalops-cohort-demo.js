@@ -1,3 +1,4 @@
+import {parseDirectory,directoryRecords} from './hospitalops-directory.js';
 import {norm,parseDate,readDocument} from './hospitalops-import.js';
 
 const required=['Ref','RAJAL','RANAP','ORLA'];
@@ -73,6 +74,8 @@ export function buildCohortDemo(sections){
  // Ref has two Penjamin columns. The master sits immediately left of Tipe Penjamin.
  const typeCol=ref[0]?.findIndex(v=>norm(v)==='tipe penjamin')??-1;
  if(typeCol<1||norm(ref[0][typeCol-1])!=='penjamin')throw new Error('Kolom Penjamin dan Tipe Penjamin tidak ditemukan berdampingan di Ref.');
+ const reference=parseDirectory([{name:'Ref',rows:ref}]);
+ if(reference.errors.length)throw new Error(reference.errors[0]);
  const partners=[],byName=new Map();
  for(const row of ref.slice(1)){
   const sourceType=str(row[typeCol]),type=typeMap[norm(sourceType)];
@@ -130,7 +133,7 @@ export function buildCohortDemo(sections){
  }
  const services=[...additional.values()].map(({values:[month,service,source],count})=>({month,service,source,count}));
  const availableMonths=[...new Set([...Object.keys(patientMonths.out),...Object.keys(patientMonths.in),...services.map(r=>r.month)])].sort(order);
- return {latest,patientMonths,availableMonths,services,records:{partners,pipeline,referrals}};
+ return {latest,patientMonths,availableMonths,services,records:{partners,pipeline,referrals,'ref-directory':directoryRecords(reference.rows)}};
 }
 
 export async function openCohortDemo(file){

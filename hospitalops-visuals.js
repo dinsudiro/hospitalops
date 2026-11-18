@@ -1,7 +1,7 @@
-const groups=[['month','Bulan masuk'],['day','Tanggal masuk'],['category','Kategori unit'],['unit','Unit / poli'],['payer','Penjamin'],['insurance','Grup jaminan']];
+const groups=[['month','Bulan masuk'],['day','Tanggal masuk'],['category','Kategori unit'],['unit','Unit / poli'],['payer','Penjamin'],['insurance','Grup jaminan'],['payerType','Tipe Penjamin'],['labExam','Jenis Pemeriksaan Lab']];
 const metrics=[['visits','Jumlah kunjungan'],['patients','Pasien unik (No RM)'],['billing','Total billing'],['claims','Total tarif e-Klaim'],['average','Rata-rata billing / kunjungan']];
 const types=[['bar','Diagram batang'],['line','Diagram garis'],['pie','Diagram lingkaran'],['table','Tabel ringkasan']];
-const columns={category:7,unit:8,payer:9,insurance:10};
+const columns={category:7,unit:8,payer:9,insurance:10,payerType:13,labExam:14};
 const colors=['#087b63','#449ed0','#e4a83b','#8672bf','#da7b75','#48b5a1','#717e97'];
 const currency=new Set(['billing','claims','average']);
 const labelOf=(list,key)=>list.find(([id])=>id===key)?.[1]||key;
@@ -11,7 +11,7 @@ export function aggregatePatients(rows,config){
  let visits=0,missingRM=0;
  for(const r of rows){
   if(config.from&&r[5]<config.from||config.to&&r[5]>config.to||config.category&&r[7]!==config.category||
-   config.insurance&&r[10]!==config.insurance)continue;
+   config.insurance&&r[10]!==config.insurance||config.payerType&&r[13]!==config.payerType||config.labExam&&r[14]!==config.labExam)continue;
   visits++;
   const key=config.group==='month'?r[5].slice(0,7):config.group==='day'?r[5]:r[columns[config.group]]||'Belum diisi';
   if(!grouped.has(key))grouped.set(key,{key,visits:0,billing:0,claims:0,patients:new Set()});
@@ -32,7 +32,7 @@ export function createVisuals(ui){
  const format=(value,metric)=>currency.has(metric)?money(Math.round(value*100)/100):number(value);
  const act=(name,action,id='',primary=false)=>button(name,'data-visual="'+action+'" data-visual-id="'+esc(id)+'"',primary?'plus':'',primary);
  const saved=()=>records('visualizations');
- const defaultConfig=()=>({name:'Kunjungan per bulan',type:'bar',group:'month',metric:'visits',sort:'category',limit:'12',order:saved().filter(r=>!r.archived).length+1,from:'',to:'',category:'',insurance:''});
+ const defaultConfig=()=>({name:'Kunjungan per bulan',type:'bar',group:'month',metric:'visits',sort:'category',limit:'12',order:saved().filter(r=>!r.archived).length+1,from:'',to:'',category:'',insurance:'',payerType:'',labExam:''});
  const groupLabel=(key,group)=>{
   if(group==='month')return new Intl.DateTimeFormat('id-ID',{month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(key+'-01T00:00:00Z'));
   if(group==='day')return new Intl.DateTimeFormat('id-ID',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(key+'T00:00:00Z'));
@@ -107,6 +107,8 @@ export function createVisuals(ui){
    label('Tanggal masuk sampai',input('to',c.to,'date','min="1900-01-01" max="2100-12-31"'))+
    label('Kategori unit',select('category',[['','Semua kategori'],...new Set([...categories,...(c.category?[c.category]:[])])],c.category))+
    label('Grup jaminan',select('insurance',[['','Semua grup jaminan'],...new Set([...insurances,...(c.insurance?[c.insurance]:[])])],c.insurance))+
+   label('Tipe Penjamin',select('payerType',[['','Semua tipe penjamin'],...new Set([...rows().map(r=>r[13]||'Belum terpetakan'),...(c.payerType?[c.payerType]:[])])],c.payerType||''))+
+   label('Jenis Pemeriksaan Lab',select('labExam',[['','Semua pemeriksaan lab'],...new Set([...rows().map(r=>r[14]||'—'),...(c.labExam?[c.labExam]:[])])],c.labExam||''))+
    label('Posisi di dashboard',input('order',c.order||1,'number','required min="1" max="999" step="1"'))+'</div>'+
    '<h3>Pratinjau</h3><div id="visual-preview">'+renderVisual(c)+'</div>';
   show(config?'Atur visualisasi':'Tambah visualisasi',form('visual-save',controls,'Simpan visualisasi','data-id="'+esc(config?.id||'')+'"')+

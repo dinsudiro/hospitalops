@@ -78,20 +78,24 @@ export function parsePatientSheet(section){
 }
 export function createPatients(ui){
  const {records,data,heading,panel,button,table,esc,show,form,fmt,money,options}=ui;
- let pending=null,sections=[],fileName='',scope=null,query='',category='',unit='',payor='',from='',to='',page=1;
+ let pending=null,sections=[],fileName='',scope=null,query='',category='',unit='',payor='',payerType='',labExam='',from='',to='',page=1;
  const size=50;
+ const enriched=()=>ui.enrich(all());
+ const displayColumns=[...patientColumns,'Tipe Penjamin','Jenis Pemeriksaan Lab'];
  const all=()=>records('patient-buckets').flatMap(b=>b.rows||[]);
  function sync(){
-  if(scope!==data()){scope=data();query='';category='';unit='';payor='';from='';to='';page=1;pending=null}
+  if(scope!==data()){scope=data();query='';category='';unit='';payor='';payerType='';labExam='';from='';to='';page=1;pending=null}
  }
  function view(){
   sync();
-  const list=all();
-  const choices=(col,first)=>options([['',first],...[...new Set(list.map(r=>r[col]))].filter(Boolean).sort()],col===7?category:col===8?unit:payor);
+  const list=enriched();
+  const choices=(col,first)=>options([['',first],...[...new Set(list.map(r=>r[col]))].filter(Boolean).sort()],col===7?category:col===8?unit:col===13?payerType:col===14?labExam:payor);
   const filters='<div class="filters"><input id="patients-query" aria-label="Cari pasien" type="search" placeholder="Cari nama, RM, registrasi, atau penjamin…" value="'+esc(query)+'">'+
    '<select id="patients-category" aria-label="Kategori unit">'+choices(7,'Semua kategori unit')+'</select>'+
    '<select id="patients-unit" aria-label="Unit layanan">'+choices(8,'Semua unit')+'</select>'+
    '<select id="patients-payor" aria-label="Grup jaminan">'+choices(10,'Semua grup jaminan')+'</select>'+
+   '<select id="patients-type" aria-label="Tipe Penjamin">'+choices(13,'Semua tipe penjamin')+'</select>'+
+   '<select id="patients-lab-exam" aria-label="Jenis Pemeriksaan Lab">'+choices(14,'Semua pemeriksaan lab')+'</select>'+
    '<label>Dari <input id="patients-from" aria-label="Tanggal masuk dari" type="date" value="'+esc(from)+'"></label>'+
    '<label>Sampai <input id="patients-to" aria-label="Tanggal masuk sampai" type="date" value="'+esc(to)+'"></label></div>';
   return heading('Data Pasien','Unggah laporan Excel untuk memperbarui data pasien dan billing.',button('Upload Excel','data-patients="upload"','content',true))+
@@ -100,21 +104,23 @@ export function createPatients(ui){
  }
  function selected(){
   const text=query.toLowerCase();
-  return all().filter(r=>(!category||r[7]===category)&&(!unit||r[8]===unit)&&(!payor||r[10]===payor)&&
+  return enriched().filter(r=>(!category||r[7]===category)&&(!unit||r[8]===unit)&&(!payor||r[10]===payor)&&(!payerType||r[13]===payerType)&&(!labExam||r[14]===labExam)&&
    (!from||r[5]>=from)&&(!to||r[5]<=to)&&[r[1],r[2],r[4],r[9]].join(' ').toLowerCase().includes(text))
    .sort((a,b)=>b[5].localeCompare(a[5])||a[2].localeCompare(b[2]));
  }
  function cells(row,index){
-  return '<tr>'+row.map((v,i)=>'<td>'+esc(i===0?index+1:i===5||i===6?fmt(v):i>10?money(v):v||'—')+'</td>').join('')+'</tr>';
+  return '<tr>'+row.map((v,i)=>'<td>'+esc(i===0?index+1:i===5||i===6?fmt(v):i===11||i===12?money(v):v||'—')+'</td>').join('')+'</tr>';
  }
  function results(){
   const rows=selected(),pages=Math.max(1,Math.ceil(rows.length/size));page=Math.min(page,pages);
   const billing=rows.reduce((sum,r)=>sum+r[12],0),claims=rows.reduce((sum,r)=>sum+r[11],0);
   const body=rows.slice((page-1)*size,page*size).map((r,i)=>cells(r,(page-1)*size+i)).join('');
   const history=records('patient-imports').slice(-1)[0];
+  const missing=rows.filter(r=>r[13]==='Belum terpetakan').length;
   return '<p class="sub">'+rows.length.toLocaleString('id-ID')+' kunjungan · Total billing '+money(billing)+' · Tarif e-Klaim '+money(claims)+'</p>'+
    (from&&to&&from>to?'<p role="alert">Tanggal sampai harus sama dengan atau setelah tanggal dari.</p>':'')+
-   table(patientColumns,body||'<tr><td colspan="13">Belum ada data yang sesuai. Pilih Upload Excel untuk memuat laporan.</td></tr>')+
+   (missing?'<p class="sub">'+missing+' kunjungan belum terpetakan. Lengkapi nama penjamin di Ref Direktori.</p>':'')+
+   table(displayColumns,body||'<tr><td colspan="15">Belum ada data yang sesuai. Pilih Upload Excel untuk memuat laporan.</td></tr>')+
    '<div class="actions">'+button('Sebelumnya','data-patients="previous" '+(page===1?'disabled':''))+
    '<span>Halaman '+page+' / '+pages+'</span>'+button('Berikutnya','data-patients="next" '+(page===pages?'disabled':''))+'</div>'+
    (history?'<p class="sub">Upload terakhir '+esc(history.fileName)+' · '+history.added+' baru · '+history.updated+' diperbarui · '+history.unchanged+' sama.</p>':'');
@@ -145,7 +151,7 @@ export function createPatients(ui){
    '<p>'+parsed.rows.length+' kunjungan terbaca · '+added+' baru · '+updated+' diperbarui · '+unchanged+' sama.</p>'+
    '<p class="sub">'+parsed.duplicates+' duplikasi identik · '+parsed.summaries+' baris total dilewati.</p>'+
    (parsed.errors.length?'<p role="alert">'+parsed.errors.length+' baris perlu diperbaiki.</p><ul>'+parsed.errors.slice(0,5).map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul>':'')+
-   table(patientColumns,parsed.rows.slice(0,5).map(cells).join(''))+
+   table(displayColumns,ui.enrich(parsed.rows.slice(0,5)).map(cells).join(''))+
    '<p class="sub">Pratinjau menampilkan hingga 5 baris. Seluruh baris valid disimpan setelah menekan Simpan.</p>';
   document.querySelector('[data-form="patient-upload"] button.primary').disabled=!!parsed.errors.length||!parsed.rows.length;
  }
@@ -165,7 +171,7 @@ export function createPatients(ui){
    return true;
   }
   const filters={'patients-query':v=>query=v,'patients-category':v=>category=v,'patients-unit':v=>unit=v,
-   'patients-payor':v=>payor=v,'patients-from':v=>from=v,'patients-to':v=>to=v};
+   'patients-payor':v=>payor=v,'patients-type':v=>payerType=v,'patients-lab-exam':v=>labExam=v,'patients-from':v=>from=v,'patients-to':v=>to=v};
   if(filters[target.id]){filters[target.id](target.value);page=1;document.getElementById('patients-results').innerHTML=results();return true}
   return false;
  }
