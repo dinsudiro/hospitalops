@@ -1,3 +1,4 @@
+import {createPartnerPatients} from './hospitalops-partner-patients.js';
 import {createLabTariffs} from './hospitalops-lab-tariffs.js';
 import {createDirectory} from './hospitalops-directory.js';
 import {createVisuals} from './hospitalops-visuals.js';
@@ -62,7 +63,7 @@ function render(){
   document.querySelector('#sidebar').innerHTML='<div class="brand"><span class="logo">'+icon('brand')+'</span><div>HospitalOps<small>Sales & Marketing</small></div></div><button class="org" data-action="org"><span class="orgmark">'+initials(org().name)+'</span><span>'+esc(org().name)+'<small>Organisasi</small></span>'+icon('chev')+'</button><nav>'+groups.map(g=>'<span class="navlabel">'+esc(g.toUpperCase())+'</span>'+visible.filter(m=>m[3]===g).map(m=>'<button class="navbtn '+(page===m[0]?'active':'')+'" '+nav(m[0])+(page===m[0]?' aria-current="page"':'')+'>'+icon(m[2])+esc(m[1])+'</button>').join('')).join('')+'</nav><footer><div class="person"><span class="avatar" aria-hidden="true">'+initials(previewRole)+'</span><span>'+esc(previewRole)+'<small>Peran akun</small></span></div></footer>';
   document.querySelector('#topbar').innerHTML='<button class="iconbtn mobile" data-action="menu" aria-label="Buka menu">'+icon('menu')+'</button><div class="bread"><span>'+esc(org().name)+'</span><span>/</span><strong>'+esc(mod(page)[1])+'</strong></div><div class="tools"><span class="badge"><i class="dot"></i> Supabase</span><button class="iconbtn" data-action="notifications" aria-label="Pengaturan notifikasi">'+icon('bell')+'</button></div>';
   const content=document.querySelector('#content');
-  const views={overview,patients:patientData.view,directory:directory.view,'lab-tariffs':labTariffs.view,visuals:visuals.view,calendar,'import-doc':operations.importView,pks:operations.pksView,referrals:operations.referralView,partners:b2b.partners,pipeline:b2b.view,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),report:()=>reportView(false),analysis:()=>reportView(true),settings};
+  const views={overview,patients:patientData.view,directory:directory.view,'lab-tariffs':labTariffs.view,visuals:visuals.view,calendar,'import-doc':operations.importView,pks:operations.pksView,referrals:operations.referralView,partners:partnerPatients.view,pipeline:b2b.view,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),report:()=>reportView(false),analysis:()=>reportView(true),settings};
   content.innerHTML=(views[page]||recordView)();
 }
 function heading(title,sub,actions='',tag=''){return '<div class="heading"><div>'+(tag?'<div class="eyebrow">'+esc(tag)+'</div>':'')+'<h1>'+esc(title)+'</h1><p class="sub">'+esc(sub)+'</p></div><div class="actions">'+actions+'</div></div>'}
@@ -267,6 +268,8 @@ const patientData=createPatients({records,data,heading,panel,button,table,esc,sh
   demo:false,wide:()=>modal.classList.add('lead-dialog')});
 const visuals=createVisuals({rows:()=>directory.patients(patientData.all()),records,data,heading,panel,button,table,label,input,select,options,esc,show,form,money,unique,
  wide:()=>modal.classList.add('lead-dialog')});
+const partnerPatients=createPartnerPatients({rows:()=>directory.patients(patientData.all()),profiles:()=>records('partners'),data,
+ heading,panel,button,table,esc,fmt,money,options,show,wide:()=>modal.classList.add('lead-dialog')});
 const b2b=createB2B({records,data,active:id=>allowed(mod(id)),heading,panel,button,table,label,input,select,options,esc,fmt,
   show,showWide:(title,body)=>{show(title,body);modal.classList.add('lead-dialog')},form,today:currentDate,unique,campaigns,
   newReferral:id=>operations.newReferral(id),newMCU:id=>edit('mcu',undefined,id)
@@ -468,6 +471,7 @@ document.addEventListener('click',async e=>{
   return;
  }
  if(!state.workspace&&b.dataset.action!=='close')return;
+ if(b.dataset.partnerPatients){partnerPatients.click(b.dataset);return}
  if(b.dataset.labTariff){labTariffs.click(b.dataset);return}
  if(b.dataset.directory){directory.click(b.dataset);return}
  if(b.dataset.visual){visuals.click(b.dataset);return}
@@ -494,6 +498,7 @@ document.addEventListener('click',async e=>{
  }
 });
 document.addEventListener('input',e=>{
+ if(partnerPatients.change(e.target))return;
  if(e.target.id==='directory-query'){directory.change(e.target);return}
  if(visuals.change(e.target))return;
  if(e.target.id==='patients-query'){patientData.change(e.target);return}
@@ -509,7 +514,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',async e=>{
  const t=e.target;
- if(await directory.change(t)||visuals.change(t)||await patientData.change(t)||b2b.change(t)||await operations.change(t))return;
+ if(partnerPatients.change(t)||await directory.change(t)||visuals.change(t)||await patientData.change(t)||b2b.change(t)||await operations.change(t))return;
  if(t.id==='leadMonth'&&t.value&&t.validity.valid){
   leadState.month=t.value;
   render();document.querySelector('#leadMonth').focus();
