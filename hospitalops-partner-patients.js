@@ -146,7 +146,8 @@ export function createPartnerPatients(ui){
    next.id='partner-'+[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
   }
   if(workspace!==data())throw Error('Organisasi berubah. Buka ulang profil mitra.');
-  data().records.partners=old?profiles().map(p=>p.id===old.id?next:p):[...profiles(),next];
+  const existing=profiles().find(p=>p.id===next.id);
+  data().records.partners=existing?profiles().map(p=>p.id===next.id?next:p):[...profiles(),next];
   ui.setReferenceType(next.name,next.type);
   return {page:'partners',partnerKey:payerKey(next.name),message:'Profil dan kategori mitra tersimpan.'};
  }
