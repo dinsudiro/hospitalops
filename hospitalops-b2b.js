@@ -1,6 +1,6 @@
 import {parseDate} from './hospitalops-import.js';
 
-export const partnerTypes=['Perusahaan','Instansi','Lembaga','Rumah Sakit','Dokter Rujukan','Bidan Rujukan','Sekolah','Organisasi','Klinik','Lainnya'];
+export const partnerTypes=['Perusahaan','Asuransi','Instansi','Lembaga','Komunitas','Mitra Faskes','Mitra Rumah Sakit','Rumah Sakit','Dokter Rujukan','Bidan Rujukan','Sekolah','Organisasi','Klinik','Lainnya'];
 export const referralTypes=['Rujukan pasien langsung','Rujukan pemeriksaan ke RS Ummi'];
 const services=['Patologi Anatomi (PA)','Mikrobiologi','Persalinan','Laboratorium','Radiologi','Rujukan Pasien','MCU','Lainnya'];
 const sampleServices=services.slice(0,2);
@@ -91,13 +91,7 @@ export function createB2B(ui){
   return heading('Mitra B2B','Gunakan satu profil mitra untuk semua peluang layanannya.',btn('Tambah mitra','partner-new','',true))+
    panel('Daftar mitra','Pilih nama mitra untuk membuka profilnya.',table(['Mitra','Jenis','Kontak','Peluang'],body||empty(4,'Belum ada mitra tercatat.')));
  }
- function partnerForm(p){
-  const controls='<div class="ops-grid">'+label('Nama mitra',input('name',p?.name,'text','required maxlength="140"'))+
-   label('Jenis mitra',select('type',pick('Pilih jenis mitra',partnerTypes),p?.type||'','required'))+
-   label('Kontak / PIC mitra',input('contact',p?.contact,'text','maxlength="140"'))+
-   label('Wilayah / alamat',input('location',p?.location,'text','maxlength="180"'))+'</div>'+label('Catatan',textarea('note',p?.note));
-  show(p?'Edit mitra':'Tambah mitra',form('b2b-partner',controls,'Simpan','data-id="'+esc(p?.id||'')+'"'));
- }
+ function partnerForm(p){return ui.profileEditor(p)}
  function editor(op){
   const status=op?.status==='Menang'?'Won':oldStages[op?.status]||op?.status||'Prospek';
   const availableStages=status==='Won'?['Won',...activeStages]:realizations(op||{}).length?activeStages:editableStages;
@@ -158,7 +152,7 @@ export function createB2B(ui){
    const p=row('partners',id),name=v.name.trim();
    if((id&&!p)||!name||!partnerTypes.includes(v.type))throw new Error('Lengkapi nama dan jenis mitra.');
    if(records('partners').some(r=>r.id!==id&&normalized(r.name)===normalized(name)&&r.type===v.type))throw new Error('Mitra dengan nama dan jenis ini sudah terdaftar.');
-   save('partners',{id:id||unique(),name,type:v.type,contact:v.contact.trim(),location:v.location.trim(),note:v.note.trim()});
+   save('partners',{...p,id:id||unique(),name,type:v.type,contact:v.contact.trim(),location:v.location.trim(),note:v.note.trim()});
    return {page:'partners',message:'Mitra tersimpan.'};
   }
   if(!active('pipeline'))throw new Error('Modul Pipeline Sales B2B dinonaktifkan.');

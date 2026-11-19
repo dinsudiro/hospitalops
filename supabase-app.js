@@ -269,8 +269,9 @@ const patientData=createPatients({records,data,heading,panel,button,table,esc,sh
 const visuals=createVisuals({rows:()=>directory.patients(patientData.all()),records,data,heading,panel,button,table,label,input,select,options,esc,show,form,money,unique,
  wide:()=>modal.classList.add('lead-dialog')});
 const partnerPatients=createPartnerPatients({rows:()=>directory.patients(patientData.all()),profiles:()=>records('partners'),data,
- heading,panel,button,table,esc,fmt,money,options,show,wide:()=>modal.classList.add('lead-dialog')});
-const b2b=createB2B({records,data,active:id=>allowed(mod(id)),heading,panel,button,table,label,input,select,options,esc,fmt,
+ heading,panel,button,table,esc,fmt,money,options,show,label,input,select,form,
+ agreements:()=>allowed(mod('pks'))?records('pks'):[],setReferenceType:directory.setType,wide:()=>modal.classList.add('lead-dialog')});
+const b2b=createB2B({profileEditor:partnerPatients.editor,records,data,active:id=>allowed(mod(id)),heading,panel,button,table,label,input,select,options,esc,fmt,
   show,showWide:(title,body)=>{show(title,body);modal.classList.add('lead-dialog')},form,today:currentDate,unique,campaigns,
   newReferral:id=>operations.newReferral(id),newMCU:id=>edit('mcu',undefined,id)
 });
@@ -548,14 +549,14 @@ document.addEventListener('submit',async e=>{
  if(!workspace)return;
  const before=structuredClone(data());
  if(kind==='activity'){edit(v.module);return}
- if(kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
+ if(kind==='partner-profile-save'||kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
   working=true;
   const submit=f.querySelector('button.primary');submit.disabled=true;
   try{
-   const result=(kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
+   const result=await (kind==='partner-profile-save'?partnerPatients:kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
    await saveChanges(workspace,before);
    if(state.workspace!==workspace)return;
-   modal.close();goto(result.page);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message);
+   modal.close();goto(result.page);if(result.partnerKey)partnerPatients.detailByKey(result.partnerKey);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message);
   }catch(error){workspace.data=before;if(state.workspace===workspace)cloudError(error)}
   finally{working=false;submit.disabled=false}
   return;

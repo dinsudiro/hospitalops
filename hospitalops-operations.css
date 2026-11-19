@@ -18,3 +18,7 @@
 .viz-pie ul{padding:0;list-style:none;font-size:12px;display:grid;gap:8px;flex:1;min-width:180px}
 .viz-pie li{overflow-wrap:anywhere}.viz-pie li i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
 #visual-preview{min-width:0}#visual-preview .tablewrap{max-height:350px;overflow:auto}
+
+.partner-cooperations{border:1px solid var(--line);border-radius:8px;padding:12px;margin:0}
+.ops-grid label.check{display:flex;align-items:center;gap:8px}
+.ops-grid .check input[type="checkbox"]{width:16px;flex:0 0 16px}

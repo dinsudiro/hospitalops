@@ -191,7 +191,7 @@ export function createOperations(ui) {
     if(f.dataset.opportunityId&&(!link||(!old&&link.closed)))throw new Error('Peluang rujukan tidak tersedia.');
     const {partnerType,referralType,name:rawName,service:rawService}=link||values;
     const {date,status}=values, name=rawName.trim(),service=rawService.trim(),count=Number(values.count);
-    if(!name||!service||!partnerTypes.includes(partnerType)||!referralTypes.includes(referralType)||
+    if(!name||!service||(!link&&!partnerTypes.includes(partnerType))||!referralTypes.includes(referralType)||
       (!referralStatuses.includes(status)&&!(status==='Sampel dikirim'&&(link?.sample||old?.status===status)))||parseDate(date)!==date||!Number.isInteger(count)||count<1||count>999999){
      throw new Error('Periksa kembali mitra, layanan, tanggal, dan jumlah rujukan.');
     }

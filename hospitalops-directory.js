@@ -132,7 +132,7 @@ export function createDirectory(ui){
   }
   return {page:'directory',message:'Referensi tersimpan. Tipe Penjamin pasien otomatis menyesuaikan.'};
  }
- return {view,change,mutate,entries,patients:rows=>ui.enrichLab(enrichPatients(rows,entries())),click(d){
+ return {view,change,mutate,entries,setType:(name,type)=>put([{name,type}]),patients:rows=>ui.enrichLab(enrichPatients(rows,entries())),click(d){
   if(d.directory==='new')return editor(null,d.directoryKey||'');
   if(d.directory==='upload')return upload();
   if(d.directory==='edit'){const entry=entries().find(e=>payerKey(e.name)===d.directoryKey);if(entry)editor(entry)}
