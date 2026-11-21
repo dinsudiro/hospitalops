@@ -205,7 +205,7 @@ dialog::backdrop { background: #12382d75; }
 </div>
 <dialog id="modal" aria-labelledby="modal-title"></dialog><div id="toast" class="toast" role="status" hidden></div>
 <script type="module">
-  import('./supabase-app.js').catch(() => {
+  import('./supabase-app.js?v=20261121-patients75').catch(() => {
     document.querySelector('#account [role="status"]').textContent =
       'Supabase gagal dimuat. Periksa koneksi dan muat ulang halaman.';
   });

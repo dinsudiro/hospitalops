@@ -9,7 +9,7 @@ export async function readPatientDocument(file){
  if(!/\.(xlsx|xls|csv)$/i.test(file.name))throw Error('Pilih file .xls, .xlsx, atau .csv.');
  const bytes=await file.arrayBuffer();
  return new Promise((resolve,reject)=>{
-  const worker=new Worker(new URL('./hospitalops-patient-worker.js',import.meta.url));
+  const worker=new Worker(new URL('./hospitalops-patient-worker.js?v=20261121-patients75',import.meta.url));
   worker.onmessage=({data})=>{worker.terminate();data.error?reject(Error(data.error)):resolve(data.sections)};
   worker.onerror=()=>{worker.terminate();reject(Error('Pembacaan Excel gagal. Coba muat ulang halaman dan unggah kembali.'))};
   worker.postMessage(bytes,[bytes]);

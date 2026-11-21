@@ -1,8 +1,8 @@
-import {createPartnerPatients} from './hospitalops-partner-patients.js';
-import {createLabTariffs} from './hospitalops-lab-tariffs.js';
-import {createDirectory} from './hospitalops-directory.js';
-import {createVisuals} from './hospitalops-visuals.js';
-import {createPatients} from './hospitalops-patients.js';
+import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-patients75';
+import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261121-patients75';
+import {createDirectory} from './hospitalops-directory.js?v=20261121-patients75';
+import {createVisuals} from './hospitalops-visuals.js?v=20261121-patients75';
+import {createPatients} from './hospitalops-patients.js?v=20261121-patients75';
 import { createOperations } from './hospitalops-operations.js';
 import { createB2B, pipelineStages } from './hospitalops-b2b.js';
 import {
