@@ -1,9 +1,10 @@
-import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-account1';
+import {createDispositions} from './hospitalops-dispositions.js?v=20261121-docflow1';
+import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-docflow1';
 import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261121-patients75';
 import {createDirectory} from './hospitalops-directory.js?v=20261121-patients75';
 import {createVisuals} from './hospitalops-visuals.js?v=20261121-patients75';
 import {createPatients} from './hospitalops-patients.js?v=20261121-patients75';
-import { createOperations } from './hospitalops-operations.js';
+import { createOperations } from './hospitalops-operations.js?v=20261121-docflow1';
 import { createB2B, pipelineStages } from './hospitalops-b2b.js';
 import {
  watchUser, login, register, logout, resetPassword, updatePassword, listOrganizations,
@@ -16,7 +17,7 @@ plus:'<path d="M12 5v14M5 12h14"/>',brand:'<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6
 function icon(name){return '<svg class="icon icon-'+name+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(drawings[name]||drawings.content)+'</svg>'}
 const previewRole='Manager';
 const modules=[
-['overview','Ringkasan','home','Ruang kerja'],['import-doc','Impor Dokumen','content','Ruang kerja'],['pks','PKS / MoU','content','Sales & Relasi'],['calendar','Kalender Terpadu','calendar','Ruang kerja'],['tasks','Delegasi Tugas','tasks','Ruang kerja'],
+['overview','Ringkasan','home','Ruang kerja'],['import-doc','Impor Dokumen','content','Ruang kerja'],['pks','PKS / MoU','content','Sales & Relasi'],['dispositions','Surat Disposisi','content','Sales & Relasi'],['calendar','Kalender Terpadu','calendar','Ruang kerja'],['tasks','Delegasi Tugas','tasks','Ruang kerja'],
 ['partners','Mitra B2B','people','Sales & Relasi'],['pipeline','Pipeline Sales B2B','sales','Sales & Relasi',[4,7]],['referrals','Rujukan Mitra','people','Sales & Relasi',[4,7]],['canvass','Canvassing','pin','Sales & Relasi',[4]],['visits','Laporan Visit','content','Sales & Relasi',[4,7]],
 ['digital','Digital Marketing','digital','Digital Marketing',[1,6]],['leads','Leads Tracking','people','Digital Marketing',[1,6]],['spend','Kontrol Ads Spend','money','Digital Marketing',[1,6]],['conv','Konversi Ads','sales','Digital Marketing',[1,6]],['social','Planner Media Sosial','calendar','Digital Marketing',[1,2,5,6]],['articles','Planner Artikel Website','content','Digital Marketing',[1,2,6]],['promo','Jadwal Campaign Promo','digital','Digital Marketing',[1,2,4,6,7]],['video','Planner Produksi Video','video','Digital Marketing',[1,2,5,6]],
 ['events','Event Activation','calendar','Program & layanan',[3,4,5,6,7]],['pkrs','Planner Promkes','heart','Program & layanan',[3,5,6]],['mcu','Jadwal MCU Onsite','brand','Program & layanan',[4,7]],['directory','Ref Direktori','content','Organisasi'],['lab-tariffs','Tarif Lab B2B','money','Organisasi'],['patients','Data Pasien','people','Pelaporan & analisis',[4]],['visuals','Visualisasi Data','sales','Pelaporan & analisis'],['report','Pelaporan','content','Pelaporan & analisis',[1,3,4,6,7]],['analysis','Analisis Kinerja','sales','Pelaporan & analisis',[1,6,7]],['settings','Pengaturan Modul','settings','Organisasi',[]]
@@ -63,7 +64,7 @@ function render(){
   document.querySelector('#sidebar').innerHTML='<div class="brand"><span class="logo">'+icon('brand')+'</span><div>HospitalOps<small>Sales & Marketing</small></div></div><button class="org" data-action="org"><span class="orgmark">'+initials(org().name)+'</span><span>'+esc(org().name)+'<small>Organisasi</small></span>'+icon('chev')+'</button><nav>'+groups.map(g=>'<span class="navlabel">'+esc(g.toUpperCase())+'</span>'+visible.filter(m=>m[3]===g).map(m=>'<button class="navbtn '+(page===m[0]?'active':'')+'" '+nav(m[0])+(page===m[0]?' aria-current="page"':'')+'>'+icon(m[2])+esc(m[1])+'</button>').join('')).join('')+'</nav><footer><div class="person"><span class="avatar" aria-hidden="true">'+initials(previewRole)+'</span><span>'+esc(previewRole)+'<small>Peran akun</small></span></div></footer>';
   document.querySelector('#topbar').innerHTML='<button class="iconbtn mobile" data-action="menu" aria-label="Buka menu">'+icon('menu')+'</button><div class="bread"><span>'+esc(org().name)+'</span><span>/</span><strong>'+esc(mod(page)[1])+'</strong></div><div class="tools"><span class="badge"><i class="dot"></i> Supabase</span><button class="iconbtn" data-action="notifications" aria-label="Pengaturan notifikasi">'+icon('bell')+'</button></div>';
   const content=document.querySelector('#content');
-  const views={overview,patients:patientData.view,directory:directory.view,'lab-tariffs':labTariffs.view,visuals:visuals.view,calendar,'import-doc':operations.importView,pks:operations.pksView,referrals:operations.referralView,partners:partnerPatients.view,pipeline:b2b.view,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),report:()=>reportView(false),analysis:()=>reportView(true),settings};
+  const views={overview,patients:patientData.view,directory:directory.view,'lab-tariffs':labTariffs.view,visuals:visuals.view,calendar,'import-doc':operations.importView,pks:operations.pksView,dispositions:dispositions.view,referrals:operations.referralView,partners:partnerPatients.view,pipeline:b2b.view,leads:leadsView,tasks:recordView,spend:()=>adsView(false),conv:()=>adsView(true),report:()=>reportView(false),analysis:()=>reportView(true),settings};
   content.innerHTML=(views[page]||recordView)();
 }
 function heading(title,sub,actions='',tag=''){return '<div class="heading"><div>'+(tag?'<div class="eyebrow">'+esc(tag)+'</div>':'')+'<h1>'+esc(title)+'</h1><p class="sub">'+esc(sub)+'</p></div><div class="actions">'+actions+'</div></div>'}
@@ -123,7 +124,7 @@ function recordView(){
 function recordResults(){
  const id=page,rows=records(id).filter(r=>(!statusFilter||r.status===statusFilter)&&[r.name,r.owner,r.source,r.partnerType,r.referralType,campaigns()[r.campaign]].join(' ').toLowerCase().includes(query.toLowerCase()));
  const action=r=>'data-edit="'+esc(r.id)+'" data-module="'+esc(id)+'"';
- return rows.length?'<div class="tablewrap"><table><thead><tr><th>Aktivitas</th><th>PIC</th><th>Tanggal</th><th>Status</th><th>Campaign</th>'+'</tr></thead><tbody>'+rows.map(r=>'<tr><td><button class="rowbtn" '+action(r)+'>'+esc(r.name)+'</button></td><td>'+esc(r.owner)+'</td><td>'+fmt(r.date)+'</td><td>'+pill(r.status)+'</td><td>'+esc(campaigns()[r.campaign]||'–')+'</td>'+'</tr>').join('')+'</tbody></table></div>':'<div class="empty">Belum ada catatan yang cocok.</div>';
+ return rows.length?'<div class="tablewrap"><table><thead><tr><th>Aktivitas</th><th>PIC</th><th>Tanggal</th><th>Status</th><th>Campaign</th>'+'</tr></thead><tbody>'+rows.map(r=>'<tr><td><button class="rowbtn" '+action(r)+'>'+esc(r.name)+'</button></td><td>'+esc(r.owner)+'</td><td>'+(r.dispositionId&&r.noDeadline?'Tanpa tenggat':fmt(r.date))+'</td><td>'+pill(r.status)+'</td><td>'+esc(campaigns()[r.campaign]||'–')+'</td>'+'</tr>').join('')+'</tbody></table></div>':'<div class="empty">Belum ada catatan yang cocok.</div>';
 }
 const leadViews=[
  ['active','Lead masuk atau tindakan bulan ini'],
@@ -275,7 +276,10 @@ const b2b=createB2B({profileEditor:partnerPatients.editor,records,data,active:id
   show,showWide:(title,body)=>{show(title,body);modal.classList.add('lead-dialog')},form,today:currentDate,unique,campaigns,
   newReferral:id=>operations.newReferral(id),newMCU:id=>edit('mcu',undefined,id)
 });
-const operations=createOperations({allowed,mod,records,data,heading,panel,button,table,label,input,select,options,esc,fmt,show,form,render,
+const documentScope=()=>state.workspace?'workspace:'+state.workspace.id:'';
+const patientPayers=()=>[...new Set(patientData.all().map(r=>String(r[9]||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+const dispositions=createDispositions({records,data,heading,panel,button,table,label,input,select,esc,fmt,show,form,unique,today:currentDate,documentScope,render,toast,wide:()=>modal.classList.add('lead-dialog')});
+const operations=createOperations({documentScope,patientPayers,wide:()=>modal.classList.add('lead-dialog'),allowed,mod,records,data,heading,panel,button,table,label,input,select,options,esc,fmt,show,form,render,
   today:currentDate,unique,campaigns,statuses,stages,
   referralContext:b2b.referralContext,
   modules:()=>['leads','promo','social','pipeline',...planIds.filter(id=>!['promo','social'].includes(id)),...data().custom.map(m=>m[0])]
@@ -296,6 +300,7 @@ function edit(id,recordId,opportunityId){
  if(id==='pipeline')return b2b.edit(recordId);
  const r=records(id).find(row=>row.id===recordId);
  if(recordId&&!r)return;
+ if(id==='tasks'&&r?.dispositionId){if(allowed(mod('dispositions')))return dispositions.editor(r.dispositionId);toast('Aktifkan menu Surat Disposisi untuk memperbarui tugas ini.');return}
  if(id==='leads'){
   show(r?'Edit lead':'Tambah lead',form('record',leadForm(r),'Simpan','data-module="leads" data-id="'+esc(r?.id||'')+'"'));
   modal.classList.add('lead-dialog');
@@ -472,6 +477,7 @@ document.addEventListener('click',async e=>{
   return;
  }
  if(!state.workspace&&b.dataset.action!=='close')return;
+ if(b.dataset.disposition){dispositions.click(b.dataset);return}
  if(b.dataset.partnerPatients){partnerPatients.click(b.dataset);return}
  if(b.dataset.labTariff){labTariffs.click(b.dataset);return}
  if(b.dataset.directory){directory.click(b.dataset);return}
@@ -499,6 +505,8 @@ document.addEventListener('click',async e=>{
  }
 });
 document.addEventListener('input',e=>{
+ if(['ops-pks','disposition-save'].includes(e.target.form?.dataset.form)&&e.target.id!=='source-document')e.target.dataset.edited='true';
+ if(e.target.id==='disposition-search'){dispositions.change(e.target);return}
  if(partnerPatients.change(e.target))return;
  if(e.target.id==='directory-query'){directory.change(e.target);return}
  if(visuals.change(e.target))return;
@@ -515,7 +523,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',async e=>{
  const t=e.target;
- if(partnerPatients.change(t)||await directory.change(t)||visuals.change(t)||await patientData.change(t)||b2b.change(t)||await operations.change(t))return;
+ if(await dispositions.change(t)||partnerPatients.change(t)||await directory.change(t)||visuals.change(t)||await patientData.change(t)||b2b.change(t)||await operations.change(t))return;
  if(t.id==='leadMonth'&&t.value&&t.validity.valid){
   leadState.month=t.value;
   render();document.querySelector('#leadMonth').focus();
@@ -549,11 +557,11 @@ document.addEventListener('submit',async e=>{
  if(!workspace)return;
  const before=structuredClone(data());
  if(kind==='activity'){edit(v.module);return}
- if(kind.startsWith('partner-')||kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
+ if(kind==='disposition-save'||kind.startsWith('partner-')||kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-pks-link','ops-referral','ops-import'].includes(kind)){
   working=true;
   const submit=f.querySelector('button.primary');submit.disabled=true;
   try{
-   const result=await (kind.startsWith('partner-')?partnerPatients:kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
+   const result=await (kind==='disposition-save'?dispositions:kind.startsWith('partner-')?partnerPatients:kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
    await saveChanges(workspace,before);
    if(state.workspace!==workspace)return;
    modal.close();goto(result.page);if(result.partnerKey)partnerPatients.detailByKey(result.partnerKey);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message);

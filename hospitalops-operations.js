@@ -1,3 +1,4 @@
+import {createDocumentUpload} from './hospitalops-documents.js?v=20261121-docflow1';
 import {fieldsFor,guess,parseDate,prepareRows,readDocument} from './hospitalops-import.js';
 
 import {partnerTypes,referralTypes} from './hospitalops-b2b.js';
@@ -17,9 +18,9 @@ export function revise(values,old,today) {
  if(!next.name||!next.partner||!next.scope||!['PKS','MoU'].includes(next.type))throw new Error('Isi judul, mitra, dan ruang lingkup.');
  if(!parseDate(next.start)||!parseDate(next.end)||next.start>next.end)throw new Error('Tanggal berakhir harus sama dengan atau setelah tanggal mulai.');
  const reason=String(values.reason||'').trim();
- if(old&&(!reason||fields.every(k=>next[k]===old[k])))throw new Error('Masukkan perubahan dan alasannya.');
+ if(old&&(!reason||fields.every(k=>next[k]===String(old[k]??''))&&!values.attachmentChanged))throw new Error('Masukkan perubahan dan alasannya.');
  if(old&&values.change==='Perpanjangan'&&next.end<=old.end)throw new Error('Perpanjangan harus memiliki tanggal berakhir yang lebih akhir.');
- const snapshot=old&&Object.fromEntries([...fields,'reason','change','version','savedAt'].map(k=>[k,old[k]]));
+ const snapshot=old&&Object.fromEntries([...fields,'reason','change','version','savedAt','attachment','patientLinkStatus','patientPartner'].map(k=>[k,old[k]]));
  return {...next,version:(old?.version||0)+1,change:old?values.change:'Pencatatan awal',reason,savedAt:today,history:old?[snapshot,...(old.history||[])]:[]};
 }
 
@@ -28,6 +29,7 @@ export function createOperations(ui) {
  const text=(k,v,required=false)=>'<textarea name="'+k+'" maxlength="700" '+(required?'required':'')+'>'+esc(v)+'</textarea>';
  const date=(k,v)=>input(k,v,'date','required min="1900-01-01" max="2100-12-31"');
  const menu=()=>ui.modules().filter(id=>allowed(mod(id)));
+ const documents=createDocumentUpload({...ui,esc,label,unique});
  let current=null;
  let filter='';
  const find=id=>records('pks').find(p=>p.id===id);
@@ -35,34 +37,51 @@ export function createOperations(ui) {
  function pksView(){
   const rows=records('pks').map(r=>({r,status:agreementStatus(r,today())})).sort((a,b)=>a.status.version.end.localeCompare(b.status.version.end));
   const selected=rows.filter(x=>!filter||x.status.name===filter);
-  const body=selected.map(({r,status})=>'<tr><td><button class="rowbtn" data-ops="detail" data-ops-id="'+esc(r.id)+'">'+esc(r.name)+'</button><div class="sub">'+esc(r.number||'')+'</div></td><td>'+esc(r.type)+'</td><td>'+esc(r.partner)+'</td><td>'+fmt(status.version.start)+' – '+fmt(status.version.end)+'</td><td>'+marker(status)+'</td><td>'+esc(r.version)+'</td></tr>').join('');
+  const body=selected.map(({r,status})=>'<tr><td><button class="rowbtn" data-ops="detail" data-ops-id="'+esc(r.id)+'">'+esc(r.name)+'</button><div class="sub">'+esc(r.number||'')+'</div></td><td>'+esc(r.type)+'</td><td>'+esc(r.partner)+'<div class="sub">'+esc(r.patientPartner?'Penjamin: '+r.patientPartner:r.patientLinkStatus==='not-yet'?'Belum ada penjamin pasien':'Belum ditautkan')+'</div></td><td>'+fmt(status.version.start)+' – '+fmt(status.version.end)+'</td><td>'+marker(status)+'</td><td>'+esc(r.version)+'</td></tr>').join('');
   return heading('PKS / MoU','Pantau masa berlaku dan buka riwayat tiap perjanjian.',button('Tambah perjanjian','data-ops="new"','plus',true))+
    panel('Daftar perjanjian',rows.length+' perjanjian · '+rows.filter(x=>x.status.name==='Segera berakhir').length+' segera berakhir',
     '<div class="filters"><select id="ops-status" aria-label="Status perjanjian">'+options([['','Semua status'],'Aktif','Segera berakhir','Berakhir','Belum mulai'],filter)+'</select></div>'+
-    table(['Perjanjian','Jenis','Mitra','Masa berlaku','Status','Versi'],body||'<tr><td colspan="6">Belum ada perjanjian pada filter ini.</td></tr>'));
+    table(['Perjanjian','Jenis','Mitra','Masa berlaku','Status','Versi'],body||'<tr><td colspan="6">Belum ada perjanjian pada filter ini.</td></tr>'))+unlinkedPayers();
+ }
+ function unlinkedPayers(){
+  const linked=records('pks').map(r=>r.patientPartner||(!r.patientLinkStatus?r.partner:''));
+  const key=n=>String(n||'').trim().toLowerCase().replace(/\s+/g,' '),names=ui.patientPayers().filter(n=>!linked.some(l=>key(l)===key(n)));
+  return '<details class="panel card"><summary>'+names.length+' penjamin pasien belum ditautkan ke PKS / MoU</summary><p class="sub">Penjamin memiliki kunjungan pasien, tetapi belum ada perjanjian yang ditautkan. Pilih mitra untuk mulai mencatat dokumennya.</p><div class="actions">'+names.slice(0,100).map(n=>button(n,'data-ops="new-for-payer" data-ops-payer="'+esc(n)+'"')).join('')+'</div></details>';
  }
  function version(r) {
   return '<div class="ops-version"><strong>Versi '+esc(r.version)+' · '+esc(r.change)+'</strong><p class="sub">'+fmt(r.savedAt)+'</p><dl>'+
-   [['Jenis / nomor',r.type+' · '+(r.number||'–')],['Judul',r.name],['Mitra',r.partner],['Masa berlaku',fmt(r.start)+' – '+fmt(r.end)],['Ruang lingkup',r.scope],['Alasan',r.reason],['Catatan',r.note]]
-   .filter(([,v])=>v).map(([k,v])=>'<dt>'+k+'</dt><dd>'+esc(v)+'</dd>').join('')+'</dl></div>';
+   [['Jenis / nomor',r.type+' · '+(r.number||'–')],['Judul',r.name],['Mitra sesuai dokumen',r.partner],['Penjamin Data Pasien',r.patientPartner||'Belum ditautkan'],['Masa berlaku',fmt(r.start)+' – '+fmt(r.end)],['Ruang lingkup',r.scope],['Alasan',r.reason],['Catatan',r.note]]
+   .filter(([,v])=>v).map(([k,v])=>'<dt>'+k+'</dt><dd>'+esc(v)+'</dd>').join('')+'</dl>'+(r.attachment?'<p>'+button('Buka dokumen · '+r.attachment.name,'data-ops="document-open" data-ops-id="'+esc(r.attachment.id)+'"')+'</p>':'')+'</div>';
  }
  function detail(r) {
   if(!r)return;
   const status=agreementStatus(r,today());
   show('Detail PKS / MoU','<div class="ops-stack"><p>'+marker(status)+(status.version!==r?' · Berdasarkan versi '+esc(status.version.version):'')+'</p>'+
-   version(r)+'<div class="actions">'+button('Catat perubahan','data-ops="revise" data-ops-id="'+esc(r.id)+'"','content')+
+   version(r)+'<div class="actions">'+button('Atur tautan penjamin','data-ops="link" data-ops-id="'+esc(r.id)+'"')+button('Catat perubahan','data-ops="revise" data-ops-id="'+esc(r.id)+'"','content')+
    button('Catat perpanjangan','data-ops="extend" data-ops-id="'+esc(r.id)+'"','calendar',true)+'</div><h3>Riwayat versi</h3>'+
    ((r.history||[]).map(h=>'<details><summary>Versi '+esc(h.version)+' · '+esc(h.change)+' · '+fmt(h.start)+' – '+fmt(h.end)+'</summary>'+version(h)+'</details>').join('')||'<p class="sub">Belum ada riwayat.</p>')+'</div>');
  }
+ function payerChoices(r){
+  const values=ui.patientPayers(),saved=r?.patientPartner;
+  return [['','Pilih nama penjamin dari Data Pasien'],...values.map(n=>[n,n]),...(saved&&!values.includes(saved)?[[saved,saved+' · Tidak ada di unggahan aktif']]:[])];
+ }
+ function linkage(r){return '<fieldset class="partner-cooperations"><legend>Tautan ke Data Pasien</legend><div class="ops-grid">'+label('Ketersediaan mitra di Data Pasien',select('patientLinkStatus',[['not-yet','Belum ada nama penjamin di Data Pasien'],['linked','Sudah ada — pilih nama penjamin']],r?.patientPartner?'linked':'not-yet'))+label('Nama penjamin dari Data Pasien',select('patientPartner',payerChoices(r),r?.patientPartner||'',r?.patientPartner?'':'disabled'))+'</div><p class="sub">Nama mitra pada dokumen boleh berbeda dengan nama penjamin pasien. Penautan dipilih pengguna; tidak menebak nama secara otomatis.</p></fieldset>'}
+ function validateLink(values,old){
+  if(!['linked','not-yet'].includes(values.patientLinkStatus))throw Error('Pilih ketersediaan penjamin di Data Pasien.');
+  const name=String(values.patientPartner||'');
+  if(values.patientLinkStatus==='linked'&&(!name||!ui.patientPayers().includes(name)&&name!==old?.patientPartner))throw Error('Pilih nama penjamin yang tersedia di Data Pasien.');
+  return {patientLinkStatus:values.patientLinkStatus,patientPartner:values.patientLinkStatus==='linked'?name:''};
+ }
+ function linkEditor(r){show('Tautkan penjamin · '+r.partner,form('ops-pks-link','<p>Nama sesuai dokumen: '+esc(r.partner)+'</p>'+linkage(r),'Simpan tautan','data-ops-id="'+esc(r.id)+'"'));ui.wide()}
  function agreement(r,change) {
-  const controls='<div class="ops-grid">'+label('Jenis',select('type',['PKS','MoU'],r?.type||'PKS'))+
+  const controls=documents.controls(r?.attachment)+'<div class="ops-grid">'+label('Jenis',select('type',['PKS','MoU'],r?.type||'PKS'))+
    label('Nomor dokumen',input('number',r?.number,'text','maxlength="100"'))+
-   label('Nama mitra',input('partner',r?.partner,'text','required maxlength="140"'))+
+   label('Nama mitra sesuai PKS / MoU',input('partner',r?.partner,'text','required maxlength="140"'))+
    label('Judul perjanjian',input('name',r?.name,'text','required maxlength="140"'))+
    label('Tanggal mulai',date('start',r?.start||today()))+label('Tanggal berakhir',date('end',r?.end))+'</div>'+
-   label('Ruang lingkup',text('scope',r?.scope,true))+(r?label('Alasan '+change.toLowerCase(),text('reason','',true)):'')+
+   linkage(r)+label('Ruang lingkup',text('scope',r?.scope,true))+(r?label('Alasan '+change.toLowerCase(),text('reason','',true)):'')+
    label('Catatan',text('note',r?.note));
-  show(r?'Catat '+change.toLowerCase():'Tambah PKS / MoU',form('ops-pks',controls,'Simpan','data-ops-id="'+esc(r?.id||'')+'" data-change="'+esc(change||'')+'"'));
+  show(r?'Catat '+change.toLowerCase():'Tambah PKS / MoU',form('ops-pks',controls,'Simpan','data-ops-id="'+esc(r?.id||'')+'" data-change="'+esc(change||'')+'"'));ui.wide();
  }
  function referralView() {
   const rows=[...records('referrals')].sort((a,b)=>b.date.localeCompare(a.date));
@@ -127,6 +146,9 @@ export function createOperations(ui) {
    (current.ready?form('ops-import','','Simpan '+current.valid.length+' catatan'):'');
  }
  async function change(element) {
+  if(element.form?.dataset.form==='ops-pks'&&element.id==='source-document')return documents.change(element,'agreement');
+  if(element.name==='patientLinkStatus'&&element.form?.elements.patientPartner){element.form.elements.patientPartner.disabled=element.value!=='linked';if(element.value!=='linked')element.form.elements.patientPartner.value='';return true}
+
   if(element.id==='ops-status'){filter=element.value;ui.render();document.querySelector('#ops-status')?.focus();return true}
   if(!current)return false;
   if(element.id==='ops-file'){
@@ -174,13 +196,22 @@ export function createOperations(ui) {
     return;
    }
    if(!allowed(mod('pks')))return;
+   if(d.ops==='document-open'){const attachment=records('pks').flatMap(r=>[r,...(r.history||[])]).map(r=>r.attachment).find(a=>a?.id===d.opsId);if(attachment)documents.open(attachment).catch(error=>document.querySelector('#cloudError').textContent=error.message);return}
+
    const r=find(d.opsId);
    if(d.ops==='new')agreement();
+   if(d.ops==='new-for-payer'){agreement();const f=document.querySelector('[data-form="ops-pks"]');f.elements.patientLinkStatus.value='linked';f.elements.patientPartner.disabled=false;f.elements.patientPartner.value=d.opsPayer;}
    if(d.ops==='detail'&&r)detail(r);
+   if(d.ops==='link'&&r)linkEditor(r);
    if(d.ops==='revise'&&r)agreement(r,'Perubahan');
    if(d.ops==='extend'&&r)agreement(r,'Perpanjangan');
   },
-  mutate(f,values){
+  async mutate(f,values){
+   if(f.dataset.form==='ops-pks-link'){
+    const old=find(f.dataset.opsId);if(!old||!allowed(mod('pks')))throw Error('Perjanjian tidak ditemukan.');
+    const next={...old,...validateLink(values,old)};data().records.pks=records('pks').map(r=>r.id===old.id?next:r);
+    return {page:'pks',message:'Tautan penjamin tersimpan tanpa mengubah versi perjanjian.'};
+   }
    if(f.dataset.form==='ops-referral'){
     if(!allowed(mod('referrals')))throw new Error('Modul dinonaktifkan.');
     const rows=records('referrals');
@@ -206,7 +237,11 @@ export function createOperations(ui) {
     if(!allowed(mod('pks')))throw new Error('Modul dinonaktifkan.');
     const old=find(f.dataset.opsId), existing=records('pks');
     if(f.dataset.opsId&&!old)throw new Error('Perjanjian tidak ditemukan.');
-    const next={id:old?.id||unique(),...revise({...values,change:f.dataset.change},old,today())};
+    const workspace=data(),link=validateLink(values,old);
+    const revised=revise({...values,change:f.dataset.change,attachmentChanged:documents.changed()},old,today());
+    const attachment=await documents.save(old?.attachment);
+    if(workspace!==data())throw Error('Organisasi berubah. Buka ulang perjanjian.');
+    const next={id:old?.id||unique(),...revised,...link,attachment};
     data().records.pks=old?existing.map(r=>r.id===old.id?next:r):[...existing,next];
     return {page:'pks',message:'Perjanjian tersimpan.'};
    }

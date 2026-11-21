@@ -126,7 +126,7 @@ export function createPartnerPatients(ui){
    plainButton(title+(sortKey===key?(sortDirection==='ascending'?' ↑':' ↓'):''),'sort','data-sort-key="'+key+'"')+'</th>').join('')+
    '<th scope="col">Profil</th></tr></thead><tbody>'+body+'</tbody></table></div>';
  }
- const documents=(g,p)=>ui.agreements().filter(a=>a.id===p?.agreementId||payerKey(a.partner)===g.key);
+ const documents=(g,p)=>ui.agreements().filter(a=>a.id===p?.agreementId||payerKey(a.patientPartner)===g.key||!a.patientLinkStatus&&payerKey(a.partner)===g.key);
  function profileSummary(g){
   const p=g.profiles[0]||{},docs=documents(g,p);
   const rows=[['Kategori mitra',g.type],['Alamat',p.location||'Belum dicatat'],['PIC Account Marketing',accountLabel(p)],['Nama PIC Mitra',p.picName||p.contact||'Belum dicatat'],

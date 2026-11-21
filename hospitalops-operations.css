@@ -32,3 +32,5 @@
 .bulk-partner-table tbody th{min-width:210px;max-width:260px;white-space:normal;overflow-wrap:anywhere}
 .bulk-partner-table td input:not([type="checkbox"]),.bulk-partner-table td select{min-width:180px;width:100%;font-size:14px}
 .bulk-cooperations{display:grid;gap:7px;min-width:190px}.bulk-cooperations label{display:flex;align-items:center;gap:7px;white-space:normal;font-size:14px}
+
+.document-text{max-height:230px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:14px;padding:12px;background:var(--surface,#fff);border:1px solid var(--line);border-radius:8px}
