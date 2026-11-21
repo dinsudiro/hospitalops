@@ -198,11 +198,12 @@ dialog::backdrop { background: #12382d75; }
 </div>
 <dialog id="modal" aria-labelledby="modal-title"></dialog><div id="toast" class="toast" role="status" hidden></div>
 <script type="module">
+import {restoreDemoPatients,saveDemoPatients} from './hospitalops-demo-patient-store.js?v=20261121-persist1';
 import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-bulk1';
 import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261121-patients75';
 import {createDirectory} from './hospitalops-directory.js?v=20261121-patients75';
 import {createVisuals} from './hospitalops-visuals.js?v=20261121-patients75';
-import {createPatients} from './hospitalops-patients.js?v=20261121-patients75';
+import {createPatients} from './hospitalops-patients.js?v=20261121-persist1';
 import { createOperations } from './hospitalops-operations.js';
 import { createB2B, pipelineStages } from './hospitalops-b2b.js';
 import { openCohortDemo } from './hospitalops-cohort-demo.js';
@@ -250,7 +251,8 @@ function fresh(){return {org:'ummi',orgs:[{id:'ummi',name:'RS Demo Utama',data:s
 let state;
 try{state=JSON.parse(localStorage.getItem(key))||fresh()}catch{state=fresh()}
 let page='overview',period='Bulanan',chartType='out',query='',statusFilter='',patientFilters={},calendarMonth='2026-11',toastTimer;
-let cohortOrg=null,cohortMonth='',cohortLoading=false;
+let cohortOrg=null,cohortMonth='',cohortLoading=false,patientSaving=false,patientStorageReady=false;
+const patientScope=()=>cohortOrg?'cohort:'+state.org:state.org;
 const workbookModule=['cohort-services','Rekap Layanan Cohort','sales','Pelaporan & analisis'];
 const allModules=()=>cohortOrg?[...modules,workbookModule]:modules;
 const org=()=>cohortOrg||state.orgs.find(o=>o.id===state.org);
@@ -524,7 +526,7 @@ const labTariffs=createLabTariffs({records,data,heading,panel,button,table,esc,l
 const directory=createDirectory({records,data,heading,panel,button,table,esc,label,input,show,form,
  wide:()=>modal.classList.add('lead-dialog'),enrichLab:labTariffs.enrich});
 const patientData=createPatients({records,data,heading,panel,button,table,esc,show,form,fmt,money,options,unique,enrich:directory.patients,
-  demo:true,wide:()=>modal.classList.add('lead-dialog')});
+  demo:true,persistentDemo:true,wide:()=>modal.classList.add('lead-dialog')});
 const visuals=createVisuals({rows:()=>directory.patients(patientData.all()),records,data,heading,panel,button,table,label,input,select,options,esc,show,form,money,unique,
  wide:()=>modal.classList.add('lead-dialog')});
 const partnerPatients=createPartnerPatients({rows:()=>directory.patients(patientData.all()),profiles:()=>records('partners'),data,
@@ -681,7 +683,9 @@ document.addEventListener('submit',async e=>{
   try{
    const workbook=await openCohortDemo(v.workbook);
    if(!modal.open||!f.isConnected)return;
-   cohortOrg={name:'RS Ummi · Cohort',workbook,data:{records:workbook.records,leadCosts:{},disabled:[],custom:[],email:'',emailOn:false,ads:[],patients:{out:[],in:[]}}};
+   const nextCohort={name:'RS Ummi · Cohort',workbook,data:{records:workbook.records,leadCosts:{},disabled:[],custom:[],email:'',emailOn:false,ads:[],patients:{out:[],in:[]}}};
+   await restoreDemoPatients('cohort:'+state.org,nextCohort.data);
+   cohortOrg=nextCohort;
    fixedDate=workbook.latest;cohortMonth=workbook.availableMonths.at(-1);
    modal.close();reset();toast('Data Cohort dimuat untuk sesi ini.');
   }catch(err){if(f.isConnected)error.textContent=err.message}
@@ -689,8 +693,19 @@ document.addEventListener('submit',async e=>{
   return;
  }
  if(kind.startsWith('partner-')||kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
-  try{const result=await (kind.startsWith('partner-')?partnerPatients:kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);save();modal.close();goto(result.page);if(result.partnerKey)partnerPatients.detailByKey(result.partnerKey);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message)}
-  catch(error){modal.querySelector('#cloudError').textContent=error.message}
+  if(patientSaving)return;
+  const isPatient=kind==='patient-upload',targetData=data(),targetScope=patientScope(),submit=f.querySelector('button.primary');
+  const previous=isPatient?{buckets:targetData.records['patient-buckets'],imports:targetData.records['patient-imports']}:null;
+  if(isPatient){patientSaving=true;submit.disabled=true;submit.textContent='Menyimpan di browser…'}
+  try{
+   if(isPatient&&!patientStorageReady)throw Error('Data pasien tersimpan belum dapat dibaca. Muat ulang halaman setelah memeriksa izin penyimpanan situs.');
+   const result=await (kind.startsWith('partner-')?partnerPatients:kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
+   if(isPatient)await saveDemoPatients(targetScope,targetData);
+   save();modal.close();goto(result.page);if(result.partnerKey)partnerPatients.detailByKey(result.partnerKey);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(isPatient?'Data pasien tersimpan di browser dan tetap ada setelah reload.':result.message);
+  }catch(error){
+   if(isPatient){targetData.records['patient-buckets']=previous.buckets;targetData.records['patient-imports']=previous.imports}
+   modal.querySelector('#cloudError').textContent=error.message;
+  }finally{if(isPatient){patientSaving=false;submit.disabled=false;submit.textContent='Simpan hasil upload'}}
   return;
  }
  if(kind==='activity'){edit(v.module);return}
@@ -755,6 +770,11 @@ document.addEventListener('submit',async e=>{
  else render();
  toast(kind==='email'?'Preferensi demo tersimpan.':'Perubahan tersimpan.');
 });
+document.getElementById('content').textContent='Memuat data pasien tersimpan…';
+try{
+ for(const organization of state.orgs)await restoreDemoPatients(organization.id,organization.data);
+ patientStorageReady=true;
+}catch(error){toast(error.message)}
 render();
 </script>
 </body></html>

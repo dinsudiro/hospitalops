@@ -131,7 +131,7 @@ export function createPatients(ui){
    '<label>Dari <input id="patients-from" aria-label="Tanggal masuk dari" type="date" value="'+esc(from)+'"></label>'+
    '<label>Sampai <input id="patients-to" aria-label="Tanggal masuk sampai" type="date" value="'+esc(to)+'"></label></div>';
   return heading('Data Pasien','Unggah laporan Excel untuk memperbarui data pasien dan billing.',button('Upload Excel','data-patients="upload"','content',true))+
-   (ui.demo?'<p class="sub">Data upload berlaku di sesi tab ini. Muat ulang halaman untuk mengakhiri sesi data pasien.</p>':'')+
+   (ui.demo?'<p class="sub">'+(ui.persistentDemo?'Data pasien tersimpan di browser ini per organisasi dan tetap ada setelah reload. Gunakan browser dan perangkat yang sama; menghapus data situs akan menghapus salinan lokal.':'Data upload berlaku di sesi tab ini. Muat ulang halaman untuk mengakhiri sesi data pasien.')+'</p>':'')+
    panel('Tabel pasien','Kolom mengikuti laporan Rekap Pasien Perusahaan.',filters+'<div id="patients-results">'+results()+'</div>');
  }
  function selected(){
