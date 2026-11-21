@@ -1,12 +1,15 @@
+import {patientRevenue} from './hospitalops-patient-metrics.js?v=20261121-revenue1';
 const groups=[['month','Bulan masuk'],['day','Tanggal masuk'],['category','Kategori unit'],['unit','Unit / poli'],['payer','Penjamin'],['insurance','Grup jaminan'],['payerType','Tipe Penjamin'],['labExam','Jenis Pemeriksaan Lab'],['doctor','Dokter'],['company','Perusahaan'],['careClass','Kelas perawatan'],['billStatus','Status billing']];
-const metrics=[['visits','Jumlah kunjungan'],['patients','Pasien unik (No RM)'],['billing','Total billing'],['claims','Tarif e-Klaim / InaCBGs'],['insuranceAmount','Total Asuransi'],['average','Rata-rata billing / kunjungan']];
+const metrics=[['visits','Jumlah kunjungan'],['patients','Pasien unik (No RM)'],['revenue','Pendapatan (Total Asuransi)'],['sourceBilling','Total Billing (data sumber)'],['claims','Tarif e-Klaim / InaCBGs'],['average','Rata-rata pendapatan / kunjungan terisi']];
 const types=[['bar','Diagram batang'],['line','Diagram garis'],['pie','Diagram lingkaran'],['table','Tabel ringkasan']];
 const columns={category:7,unit:8,payer:9,insurance:10,payerType:13,labExam:14,doctor:15,company:18,careClass:17,billStatus:27};
 const colors=['#087b63','#449ed0','#e4a83b','#8672bf','#da7b75','#48b5a1','#717e97'];
-const currency=new Set(['billing','claims','insuranceAmount','average']);
+const currency=new Set(['revenue','sourceBilling','claims','average']);
+const metricOf=metric=>['billing','insuranceAmount'].includes(metric)?'revenue':metric;
 const labelOf=(list,key)=>list.find(([id])=>id===key)?.[1]||key;
 
 export function aggregatePatients(rows,config){
+ config={...config,metric:metricOf(config.metric)};
  const grouped=new Map();
  let visits=0,missingRM=0;
  for(const r of rows){
@@ -14,14 +17,14 @@ export function aggregatePatients(rows,config){
    config.insurance&&r[10]!==config.insurance||config.payerType&&r[13]!==config.payerType||config.labExam&&r[14]!==config.labExam)continue;
   visits++;
   const key=config.group==='month'?r[5].slice(0,7):config.group==='day'?r[5]:r[columns[config.group]]||'Belum diisi';
-  if(!grouped.has(key))grouped.set(key,{key,visits:0,billing:0,claims:0,patients:new Set(),billingCount:0,insuranceAmount:0,insuranceCount:0});
-  const group=grouped.get(key);group.visits++;group.billing+=Number(r[12])||0;group.claims+=Number(r[11])||0;
+  if(!grouped.has(key))grouped.set(key,{key,visits:0,sourceBilling:0,claims:0,patients:new Set(),billingCount:0,revenue:0,revenueCount:0});
+  const group=grouped.get(key);group.visits++;group.sourceBilling+=Number(r[12])||0;group.claims+=Number(r[11])||0;
   if(r[12]!==null&&r[12]!==undefined)group.billingCount++;
-  if(r[25]!==null&&r[25]!==undefined){group.insuranceAmount+=Number(r[25])||0;group.insuranceCount++}
+  const revenue=patientRevenue(r);if(revenue!==null){group.revenue+=revenue;group.revenueCount++}
   const rm=String(r[1]||'').trim();
   if(rm&&rm!=='0'&&rm!=='-')group.patients.add(rm);else missingRM++;
  }
- const result=[...grouped.values()].filter(g=>!['billing','average'].includes(config.metric)||g.billingCount>0).filter(g=>config.metric!=='insuranceAmount'||g.insuranceCount>0).map(g=>({key:g.key,value:config.metric==='average'?g.billing/g.billingCount:
+ const result=[...grouped.values()].filter(g=>config.metric!=='sourceBilling'||g.billingCount>0).filter(g=>!['revenue','average'].includes(config.metric)||g.revenueCount>0).map(g=>({key:g.key,value:config.metric==='average'?g.revenue/g.revenueCount:
   config.metric==='patients'?g.patients.size:g[config.metric]}));
  result.sort(config.sort==='category'?(a,b)=>a.key.localeCompare(b.key):
   config.sort==='ascending'?(a,b)=>a.value-b.value||a.key.localeCompare(b.key):(a,b)=>b.value-a.value||a.key.localeCompare(b.key));
@@ -41,6 +44,7 @@ export function createVisuals(ui){
   return key;
  };
  function renderVisual(config){
+  config={...config,metric:metricOf(config.metric)};
   const result=aggregatePatients(rows(),config);
   if(!result.rows.length)return '<div class="empty">Belum ada data pada filter ini.</div>';
   const pairs=result.rows.map(r=>({...r,label:groupLabel(r.key,config.group)}));
@@ -89,16 +93,16 @@ export function createVisuals(ui){
  function view(){
   const list=saved().filter(r=>!r.archived).sort((a,b)=>Number(a.order)-Number(b.order)||a.id.localeCompare(b.id));
   const empty='<div class="empty">Tambahkan visualisasi, lalu pilih bentuk, kelompok data, nilai, dan filter.</div>';
-  const cards=list.map(c=>panel(c.name,labelOf(metrics,c.metric)+' · '+labelOf(groups,c.group),
+  const cards=list.map(c=>panel(c.name,labelOf(metrics,metricOf(c.metric))+' · '+labelOf(groups,c.group),
    renderVisual(c),act('Atur','edit',c.id))).join('');
   const archived=saved().filter(r=>r.archived);
-  return heading('Visualisasi Data','Susun dashboard dari tabel Data Pasien. Setiap visualisasi memiliki pengaturan dan filter sendiri.',act('Tambah visualisasi','new','',true))+
+  return heading('Visualisasi Data','Susun dashboard dari tabel Data Pasien. Pendapatan memakai Total Asuransi. Setiap visualisasi memiliki pengaturan dan filter sendiri.',act('Tambah visualisasi','new','',true))+
    (!rows().length?'<div class="panel card"><p>Unggah Excel di Data Pasien untuk menampilkan hasil visualisasi.</p>'+button('Buka Data Pasien','data-nav="patients"')+'</div>':'')+
    (list.length?'<div class="grid viz-grid">'+cards+'</div>':empty)+
    (archived.length?'<details class="panel card"><summary>Visualisasi diarsipkan ('+archived.length+')</summary><div class="actions">'+archived.map(c=>act('Pulihkan '+c.name,'restore',c.id)).join('')+'</div></details>':'');
  }
  function editor(config){
-  const c=config||defaultConfig(),categories=[...new Set(rows().map(r=>r[7]))].filter(Boolean).sort(),insurances=[...new Set(rows().map(r=>r[10]))].filter(Boolean).sort();
+  const c={...(config||defaultConfig()),metric:metricOf(config?.metric||defaultConfig().metric)},categories=[...new Set(rows().map(r=>r[7]))].filter(Boolean).sort(),insurances=[...new Set(rows().map(r=>r[10]))].filter(Boolean).sort();
   const controls='<div class="ops-grid">'+label('Judul visualisasi',input('name',c.name,'text','required maxlength="100"'))+
    label('Bentuk visualisasi',select('type',types,c.type))+
    label('Kelompok data',select('group',groups,c.group))+

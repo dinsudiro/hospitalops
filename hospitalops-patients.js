@@ -1,3 +1,4 @@
+import {patientRevenue} from './hospitalops-patient-metrics.js?v=20261121-revenue1';
 import {norm,parseDate} from './hospitalops-import.js';
 
 export const patientColumns=['No','No RM','No Registrasi','No SEP','Nama Pasien','Tgl Masuk','Tgl Keluar','Kategori Unit','Unit','Penjamin','Grup Jaminan','Total Tarif Eklaims','Total Amount Billing'];
@@ -130,7 +131,7 @@ export function createPatients(ui){
    '<select id="patients-lab-exam" aria-label="Jenis Pemeriksaan Lab">'+choices(14,'Semua pemeriksaan lab')+'</select>'+
    '<label>Dari <input id="patients-from" aria-label="Tanggal masuk dari" type="date" value="'+esc(from)+'"></label>'+
    '<label>Sampai <input id="patients-to" aria-label="Tanggal masuk sampai" type="date" value="'+esc(to)+'"></label></div>';
-  return heading('Data Pasien','Unggah laporan Excel untuk memperbarui data pasien dan billing.',button('Upload Excel','data-patients="upload"','content',true))+
+  return heading('Data Pasien','Unggah laporan Excel untuk memperbarui data pasien dan pendapatan.',button('Upload Excel','data-patients="upload"','content',true))+
    (ui.demo?'<p class="sub">'+(ui.persistentDemo?'Data pasien tersimpan di browser ini per organisasi dan tetap ada setelah reload. Gunakan browser dan perangkat yang sama; menghapus data situs akan menghapus salinan lokal.':'Data upload berlaku di sesi tab ini. Muat ulang halaman untuk mengakhiri sesi data pasien.')+'</p>':'')+
    panel('Tabel pasien','Kolom mengikuti laporan Rekap Pasien Perusahaan.',filters+'<div id="patients-results">'+results()+'</div>');
  }
@@ -151,11 +152,11 @@ export function createPatients(ui){
   const body=rows.slice((page-1)*size,page*size).map((r,i)=>cells(r,(page-1)*size+i)).join('');
   const history=records('patient-imports').slice(-1)[0];
   const missing=rows.filter(r=>r[13]==='Belum terpetakan').length;
-  const noBilling=rows.filter(r=>r[12]===null||r[12]===undefined).length;
-  const insurance=rows.reduce((sum,r)=>sum+Number(r[25]||0),0);
-  return '<p class="sub">'+rows.length.toLocaleString('id-ID')+' kunjungan · Total billing '+money(billing)+' · Total Asuransi '+money(insurance)+' · InaCBGs / e-Klaim '+money(claims)+'</p>'+
+  const noRevenue=rows.filter(r=>patientRevenue(r)===null).length;
+  const insurance=rows.reduce((sum,r)=>sum+(patientRevenue(r)??0),0);
+  return '<p class="sub">'+rows.length.toLocaleString('id-ID')+' kunjungan · Pendapatan (Total Asuransi) '+money(insurance)+' · Total Billing (data sumber) '+money(billing)+' · InaCBGs / e-Klaim '+money(claims)+'</p>'+
    (from&&to&&from>to?'<p role="alert">Tanggal sampai harus sama dengan atau setelah tanggal dari.</p>':'')+
-   (noBilling?'<p class="sub">'+noBilling.toLocaleString('id-ID')+' kunjungan memiliki Total Billing kosong. Total billing di atas menjumlahkan nilai yang terisi.</p>':'')+
+   (noRevenue?'<p class="sub">'+noRevenue.toLocaleString('id-ID')+' kunjungan memiliki Total Asuransi kosong. Pendapatan hanya menjumlahkan Total Asuransi yang terisi.</p>':'')+
    (missing?'<p class="sub">'+missing+' kunjungan belum terpetakan. Lengkapi nama penjamin di Ref Direktori.</p>':'')+
    table(displayColumns,body||'<tr><td colspan="25">Belum ada data yang sesuai. Pilih Upload Excel untuk memuat laporan.</td></tr>')+
    '<div class="actions">'+button('Sebelumnya','data-patients="previous" '+(page===1?'disabled':''))+
