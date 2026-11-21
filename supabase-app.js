@@ -1,10 +1,11 @@
-import {createDispositions} from './hospitalops-dispositions.js?v=20261121-docflow1';
-import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-revenue1';
+import {installTableSorting} from './hospitalops-table-sort.js?v=20261121-sortcards1';
+import {createDispositions} from './hospitalops-dispositions.js?v=20261121-sortcards1';
+import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-sortcards1';
 import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261121-patients75';
-import {createDirectory} from './hospitalops-directory.js?v=20261121-patients75';
-import {createVisuals} from './hospitalops-visuals.js?v=20261121-revenue1';
-import {createPatients} from './hospitalops-patients.js?v=20261121-revenue1';
-import { createOperations } from './hospitalops-operations.js?v=20261121-docflow1';
+import {createDirectory} from './hospitalops-directory.js?v=20261121-sortcards1';
+import {createVisuals} from './hospitalops-visuals.js?v=20261121-sortcards1';
+import {createPatients} from './hospitalops-patients.js?v=20261121-sortcards1';
+import { createOperations } from './hospitalops-operations.js?v=20261121-sortcards1';
 import { createB2B, pipelineStages } from './hospitalops-b2b.js';
 import {
  watchUser, login, register, logout, resetPassword, updatePassword, listOrganizations,
@@ -124,7 +125,7 @@ function recordView(){
 function recordResults(){
  const id=page,rows=records(id).filter(r=>(!statusFilter||r.status===statusFilter)&&[r.name,r.owner,r.source,r.partnerType,r.referralType,campaigns()[r.campaign]].join(' ').toLowerCase().includes(query.toLowerCase()));
  const action=r=>'data-edit="'+esc(r.id)+'" data-module="'+esc(id)+'"';
- return rows.length?'<div class="tablewrap"><table><thead><tr><th>Aktivitas</th><th>PIC</th><th>Tanggal</th><th>Status</th><th>Campaign</th>'+'</tr></thead><tbody>'+rows.map(r=>'<tr><td><button class="rowbtn" '+action(r)+'>'+esc(r.name)+'</button></td><td>'+esc(r.owner)+'</td><td>'+(r.dispositionId&&r.noDeadline?'Tanpa tenggat':fmt(r.date))+'</td><td>'+pill(r.status)+'</td><td>'+esc(campaigns()[r.campaign]||'–')+'</td>'+'</tr>').join('')+'</tbody></table></div>':'<div class="empty">Belum ada catatan yang cocok.</div>';
+ return rows.length?'<div class="tablewrap"><table><thead><tr><th>Aktivitas</th><th>PIC</th><th>Tanggal</th><th>Status</th><th>Campaign</th>'+'</tr></thead><tbody>'+rows.map(r=>'<tr><td><button class="rowbtn" '+action(r)+'>'+esc(r.name)+'</button></td><td>'+esc(r.owner)+'</td><td data-sort-value="'+esc(r.dispositionId&&r.noDeadline?'':r.date)+'">'+(r.dispositionId&&r.noDeadline?'Tanpa tenggat':fmt(r.date))+'</td><td>'+pill(r.status)+'</td><td>'+esc(campaigns()[r.campaign]||'–')+'</td>'+'</tr>').join('')+'</tbody></table></div>':'<div class="empty">Belum ada catatan yang cocok.</div>';
 }
 const leadViews=[
  ['active','Lead masuk atau tindakan bulan ini'],
@@ -284,6 +285,12 @@ const operations=createOperations({documentScope,patientPayers,wide:()=>modal.cl
   referralContext:b2b.referralContext,
   modules:()=>['leads','promo','social','pipeline',...planIds.filter(id=>!['promo','social'].includes(id)),...data().custom.map(m=>m[0])]
 });
+installTableSorting({scope:()=>state.workspace?.data,context:()=>page,customSort:(table,column,descending)=>{
+ if(table.closest('#patients-results')){patientData.sort(column,descending);return true}
+ if(table.closest('#directory-results')){directory.sort(column,descending);return true}
+ if(table.closest('#partner-detail-results')){partnerPatients.sortDetail(column,descending);return true}
+ return false;
+}});
 function show(title,body){
  modal.classList.remove('lead-dialog');
  modal.innerHTML='<div class="modalhead"><h2 id="modal-title">'+esc(title)+'</h2><button type="button" class="iconbtn" aria-label="Tutup" data-action="close">'+icon('close')+'</button></div>'+body+'<p id="cloudError" role="alert"></p>';

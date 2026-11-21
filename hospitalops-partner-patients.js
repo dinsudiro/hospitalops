@@ -1,3 +1,4 @@
+import {compareSortValues} from './hospitalops-table-sort.js?v=20261121-sortcards1';
 import {patientRevenue} from './hospitalops-patient-metrics.js?v=20261121-revenue1';
 import {payerKey} from './hospitalops-directory.js';
 
@@ -79,7 +80,7 @@ export function createPartnerPatients(ui){
  const accounts=()=>ui.marketingAccounts?.()||demoMarketingAccounts;
  const accountOptions=p=>[['','Belum ditugaskan'],...accounts().map(a=>[a.id,a.name+' ('+a.username+')'+(a.id.startsWith('demo-')?' · Demo':'')]),...(p?.accountPicId&&!accounts().some(a=>a.id===p.accountPicId)?[[p.accountPicId,accountLabel(p)+' · Tidak tersedia']]:[])];
  const size=50;
- let bulk=null,bulkBusy=false;
+ let bulk=null,bulkBusy=false,detailSortColumn=3,detailSortDescending=true;
  const filteredRows=()=>rows().filter(r=>(!from||r[5]>=from)&&(!to||r[5]<=to));
  const groups=()=>summarizePartners(filteredRows(),profiles());
  const find=key=>groups().find(g=>g.key===key);
@@ -88,7 +89,7 @@ export function createPartnerPatients(ui){
  const profileButton=p=>button('Ubah profil','data-partner-patients="profile" data-partner-key="'+esc(payerKey(p.name))+'" data-profile-id="'+esc(p.id)+'"');
  function reset(){
   if(scope===data())return;
-  scope=data();sortKey='revenue';sortDirection='descending';query='';type='';source='';from='';to='';page=1;detailKey='';detailQuery='';detailPage=1;
+  scope=data();sortKey='revenue';sortDirection='descending';query='';type='';source='';from='';to='';page=1;detailKey='';detailQuery='';detailPage=1;detailSortColumn=3;detailSortDescending=true;
  }
  function view(){
   reset();
@@ -255,7 +256,7 @@ export function createPartnerPatients(ui){
  function detailResults(){
   const g=find(detailKey);if(!g)return '<p>Mitra belum tersedia pada filter ini.</p>';
   const selected=g.rows.filter(r=>payerKey([r[1],r[2],r[4],r[8],r[14]].join(' ')).includes(payerKey(detailQuery)))
-   .sort((a,b)=>b[5].localeCompare(a[5])||a[2].localeCompare(b[2]));
+   .sort((a,b)=>{const col=[4,1,2,5,8,14,25][detailSortColumn];return compareSortValues(a[col],b[col],detailSortDescending)||a[2].localeCompare(b[2])});
   const pages=Math.max(1,Math.ceil(selected.length/size));detailPage=Math.min(detailPage,pages);
   return '<p class="sub">'+selected.length+' kunjungan sesuai pencarian · Pendapatan (Total Asuransi) '+money(selected.reduce((sum,r)=>sum+(patientRevenue(r)??0),0))+'</p>'+
    table(['Nama pasien','No RM','No registrasi','Tanggal masuk','Unit / layanan','Pemeriksaan lab','Pendapatan (Total Asuransi)'],
@@ -280,7 +281,7 @@ export function createPartnerPatients(ui){
   if(!fields[target.id])return false;
   fields[target.id](target.value);page=1;document.getElementById('partner-patients-results').innerHTML=results();return true;
  }
- return {view,change,mutate,editor,detailByKey(key){detailKey=key;detailQuery='';detailPage=1;detail()},click(d){
+ return {view,change,mutate,editor,sortDetail(column,descending){detailSortColumn=column;detailSortDescending=descending;detailPage=1;document.getElementById('partner-detail-results').innerHTML=detailResults()},detailByKey(key){detailKey=key;detailQuery='';detailPage=1;detail()},click(d){
   if(d.partnerPatients==='bulk-open')return bulkEditor();
   if(d.partnerPatients==='bulk-account-apply'){
    const f=document.querySelector('[data-form="partner-bulk-save"]'),account=f?.querySelector('#partner-bulk-account').value,selected=f?.querySelectorAll('[name$="-selected"]:checked');

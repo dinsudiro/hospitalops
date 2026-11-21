@@ -1,3 +1,4 @@
+import {compareSortValues} from './hospitalops-table-sort.js?v=20261121-sortcards1';
 import {patientRevenue} from './hospitalops-patient-metrics.js?v=20261121-revenue1';
 import {norm,parseDate} from './hospitalops-import.js';
 
@@ -113,11 +114,12 @@ export function createPatients(ui){
  const {records,data,heading,panel,button,table,esc,show,form,fmt,money,options}=ui;
  let pending=null,sections=[],fileName='',scope=null,query='',category='',unit='',payor='',payerType='',labExam='',from='',to='',page=1;
  const size=50;
+ let sortColumn=5,sortDescending=true;
  const enriched=()=>ui.enrich(all());
  const displayColumns=[...companyColumns,'Tipe Penjamin','Jenis Pemeriksaan Lab'];
  const all=()=>records('patient-buckets').flatMap(b=>b.rows||[]);
  function sync(){
-  if(scope!==data()){scope=data();query='';category='';unit='';payor='';payerType='';labExam='';from='';to='';page=1;pending=null}
+  if(scope!==data()){scope=data();query='';category='';unit='';payor='';payerType='';labExam='';from='';to='';page=1;pending=null;sortColumn=5;sortDescending=true}
  }
  function view(){
   sync();
@@ -139,11 +141,11 @@ export function createPatients(ui){
   const text=query.toLowerCase();
   return enriched().filter(r=>(!category||r[7]===category)&&(!unit||r[8]===unit)&&(!payor||r[10]===payor)&&(!payerType||r[13]===payerType)&&(!labExam||r[14]===labExam)&&
    (!from||r[5]>=from)&&(!to||r[5]<=to)&&[r[1],r[2],r[4],r[9]].join(' ').toLowerCase().includes(text))
-   .sort((a,b)=>b[5].localeCompare(a[5])||a[2].localeCompare(b[2]));
+   .sort((a,b)=>compareSortValues(a[sortColumn<23?companyView[sortColumn]:sortColumn===23?13:14],b[sortColumn<23?companyView[sortColumn]:sortColumn===23?13:14],sortDescending)||a[2].localeCompare(b[2]));
  }
  function cells(row,index){
   const view=[...companyView.map(i=>row[i]),row[13],row[14]];
-  return '<tr>'+view.map((v,i)=>'<td>'+esc(i===0?index+1:i===5||i===6?fmt(v):
+  return '<tr>'+view.map((v,i)=>'<td>'+esc(i===0?row[0]||index+1:i===5||i===6?fmt(v):
    [18,20,21].includes(i)?v===null||v===undefined?'—':money(v):v||'—')+'</td>').join('')+'</tr>';
  }
  function results(){
@@ -231,7 +233,7 @@ export function createPatients(ui){
   data().records['patient-imports']=[...records('patient-imports'),history];
   return {page:'patients',message:added+' kunjungan ditambahkan, '+updated+' diperbarui.'};
  }
- return {view,change,mutate,all,click(d){
+ return {view,change,mutate,all,sort(column,descending){sortColumn=column;sortDescending=descending;page=1;document.getElementById('patients-results').innerHTML=results()},click(d){
   if(d.patients==='upload')dialog();
   if(d.patients==='previous'||d.patients==='next'){page+=d.patients==='next'?1:-1;document.getElementById('patients-results').innerHTML=results()}
  }};

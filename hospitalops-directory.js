@@ -1,3 +1,4 @@
+import {compareSortValues} from './hospitalops-table-sort.js?v=20261121-sortcards1';
 import {norm,readDocument} from './hospitalops-import.js';
 
 export const payerKey=value=>String(value??'').trim().replace(/\s+/g,' ').toLocaleLowerCase('id-ID');
@@ -52,7 +53,7 @@ export function directoryRecords(rows){
 export function createDirectory(ui){
  const {data,records,heading,panel,button,table,esc,label,input,show,form}=ui;
  const entries=()=>records('ref-directory').flatMap(b=>b.rows||[]);
- let pending=null,scope=null,query='',page=1,request=0;
+ let pending=null,scope=null,query='',page=1,request=0,sortColumn=0,sortDescending=false;
  const action=(name,act,key='',primary=false)=>button(name,'data-directory="'+act+'" data-directory-key="'+esc(key)+'"',primary?'plus':'',primary);
  function put(rows){
   const existing=new Map(records('ref-directory').map(b=>[b.id,b]));
@@ -66,14 +67,14 @@ export function createDirectory(ui){
   data().records['ref-directory']=[...existing.values()];
  }
  function view(){
-  if(scope!==data()){scope=data();query='';page=1;pending=null}
+  if(scope!==data()){scope=data();query='';page=1;pending=null;sortColumn=0;sortDescending=false}
   return heading('Ref Direktori','Referensi nama penjamin dan Tipe Penjamin untuk Data Pasien.',button('Tarif Lab B2B','data-nav="lab-tariffs"')+action('Upload Ref','upload')+action('Tambah referensi','new','',true))+
    panel('Direktori penjamin','Perubahan tipe langsung digunakan oleh tabel dan visualisasi pasien.',
     '<div class="filters"><input id="directory-query" aria-label="Cari referensi" type="search" placeholder="Cari penjamin atau tipe…" value="'+esc(query)+'"></div>'+
     '<div id="directory-results">'+results()+'</div>');
  }
  function results(){
-  const list=entries().filter(e=>payerKey(e.name+' '+e.type).includes(payerKey(query))).sort((a,b)=>a.name.localeCompare(b.name));
+  const list=entries().filter(e=>payerKey(e.name+' '+e.type).includes(payerKey(query))).sort((a,b)=>compareSortValues(sortColumn===1?a.type:a.name,sortColumn===1?b.type:b.name,sortDescending)||a.name.localeCompare(b.name));
   const pages=Math.max(1,Math.ceil(list.length/50));page=Math.min(page,pages);
   return '<p class="sub">'+list.length+' referensi</p>'+table(['Penjamin / Nama Mitra','Tipe Penjamin','Aksi'],list.slice((page-1)*50,page*50).map(e=>
    '<tr><td>'+esc(e.name)+'</td><td>'+esc(e.type)+'</td><td>'+action('Ubah','edit',payerKey(e.name))+'</td></tr>').join('')||
@@ -132,7 +133,7 @@ export function createDirectory(ui){
   }
   return {page:'directory',message:'Referensi tersimpan. Tipe Penjamin pasien otomatis menyesuaikan.'};
  }
- return {view,change,mutate,entries,setType:(name,type)=>put([{name,type}]),patients:rows=>ui.enrichLab(enrichPatients(rows,entries())),click(d){
+ return {view,change,mutate,entries,sort(column,descending){sortColumn=column;sortDescending=descending;page=1;document.getElementById('directory-results').innerHTML=results()},setType:(name,type)=>put([{name,type}]),patients:rows=>ui.enrichLab(enrichPatients(rows,entries())),click(d){
   if(d.directory==='new')return editor(null,d.directoryKey||'');
   if(d.directory==='upload')return upload();
   if(d.directory==='edit'){const entry=entries().find(e=>payerKey(e.name)===d.directoryKey);if(entry)editor(entry)}

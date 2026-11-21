@@ -24,6 +24,10 @@ export function revise(values,old,today) {
  return {...next,version:(old?.version||0)+1,change:old?values.change:'Pencatatan awal',reason,savedAt:today,history:old?[snapshot,...(old.history||[])]:[]};
 }
 
+export function agreementTimeline(record){
+ return [...(record.history||[]),record].sort((a,b)=>Number(a.version)-Number(b.version)).map(v=>({...v,versionLabel:Number(v.version)===1?(v.type||record.type)+' awal':v.change||'Perubahan'}));
+}
+
 export function createOperations(ui) {
  const {allowed,mod,records,data,heading,panel,button,table,label,input,select,options,esc,fmt,show,form,today,unique,campaigns,statuses,stages}=ui;
  const text=(k,v,required=false)=>'<textarea name="'+k+'" maxlength="700" '+(required?'required':'')+'>'+esc(v)+'</textarea>';
@@ -31,17 +35,17 @@ export function createOperations(ui) {
  const menu=()=>ui.modules().filter(id=>allowed(mod(id)));
  const documents=createDocumentUpload({...ui,esc,label,unique});
  let current=null;
- let filter='';
+ let filter='',agreementOrder='end';
  const find=id=>records('pks').find(p=>p.id===id);
  const marker=status=>'<span class="pill '+(status.name==='Segera berakhir'?'warn':status.name==='Aktif'?'':'neutral')+'">'+status.name+'</span> '+status.countdown;
  function pksView(){
-  const rows=records('pks').map(r=>({r,status:agreementStatus(r,today())})).sort((a,b)=>a.status.version.end.localeCompare(b.status.version.end));
-  const selected=rows.filter(x=>!filter||x.status.name===filter);
-  const body=selected.map(({r,status})=>'<tr><td><button class="rowbtn" data-ops="detail" data-ops-id="'+esc(r.id)+'">'+esc(r.name)+'</button><div class="sub">'+esc(r.number||'')+'</div></td><td>'+esc(r.type)+'</td><td>'+esc(r.partner)+'<div class="sub">'+esc(r.patientPartner?'Penjamin: '+r.patientPartner:r.patientLinkStatus==='not-yet'?'Belum ada penjamin pasien':'Belum ditautkan')+'</div></td><td>'+fmt(status.version.start)+' – '+fmt(status.version.end)+'</td><td>'+marker(status)+'</td><td>'+esc(r.version)+'</td></tr>').join('');
-  return heading('PKS / MoU','Pantau masa berlaku dan buka riwayat tiap perjanjian.',button('Tambah perjanjian','data-ops="new"','plus',true))+
-   panel('Daftar perjanjian',rows.length+' perjanjian · '+rows.filter(x=>x.status.name==='Segera berakhir').length+' segera berakhir',
-    '<div class="filters"><select id="ops-status" aria-label="Status perjanjian">'+options([['','Semua status'],'Aktif','Segera berakhir','Berakhir','Belum mulai'],filter)+'</select></div>'+
-    table(['Perjanjian','Jenis','Mitra','Masa berlaku','Status','Versi'],body||'<tr><td colspan="6">Belum ada perjanjian pada filter ini.</td></tr>'))+unlinkedPayers();
+  const rows=records('pks').map(r=>({r,status:agreementStatus(r,today())}));
+  const selected=rows.filter(x=>!filter||x.status.name===filter).sort((a,b)=>agreementOrder==='name'?a.r.name.localeCompare(b.r.name):agreementOrder==='partner'?a.r.partner.localeCompare(b.r.partner):agreementOrder==='updated'?String(b.r.savedAt).localeCompare(String(a.r.savedAt)):a.status.version.end.localeCompare(b.status.version.end));
+  const cards=selected.map(({r,status})=>'<article class="panel agreement-card"><div class="agreement-card-head"><div><span class="sub">'+esc(r.type)+' · '+esc(r.number||'Tanpa nomor')+'</span><h2>'+esc(r.name)+'</h2><p>'+esc(r.partner)+'</p></div><div>'+marker(status)+'</div></div><p class="sub">Penjamin pasien: '+esc(r.patientPartner||'Belum ditautkan')+' · Versi terbaru '+r.version+'</p><div class="actions">'+button('Detail / tautan','data-ops="detail" data-ops-id="'+esc(r.id)+'"')+button('Perpanjangan','data-ops="extend" data-ops-id="'+esc(r.id)+'"')+button('Adendum','data-ops="addendum" data-ops-id="'+esc(r.id)+'"')+'</div><h3>Riwayat perjanjian</h3><ol class="agreement-timeline">'+agreementTimeline(r).map(v=>'<li><details><summary>Versi '+esc(v.version)+' · '+esc(v.versionLabel)+'<span class="sub">'+fmt(v.start)+' – '+fmt(v.end)+'</span></summary>'+version(v)+'</details></li>').join('')+'</ol></article>').join('');
+  return heading('PKS / MoU','Satu kartu untuk setiap perjanjian, dengan riwayat dokumen awal, perpanjangan, dan adendum.',button('Tambah perjanjian','data-ops="new"','plus',true))+
+   '<p class="sub">Untuk dokumen lanjutan, gunakan Perpanjangan atau Adendum pada kartu yang sudah ada agar riwayat tetap menyatu.</p>'+
+   '<section class="panel card"><div class="filters"><label>Status perjanjian<select id="ops-status" aria-label="Status perjanjian">'+options([['','Semua status'],'Aktif','Segera berakhir','Berakhir','Belum mulai'],filter)+'</select></label><label>Urutkan kartu<select id="ops-order" aria-label="Urutkan kartu perjanjian">'+options([['end','Masa berakhir terdekat'],['name','Nama perjanjian A–Z'],['partner','Nama mitra A–Z'],['updated','Pencatatan terbaru']],agreementOrder)+'</select></label></div><p>'+rows.length+' perjanjian · '+rows.filter(x=>x.status.name==='Segera berakhir').length+' segera berakhir · '+selected.length+' sesuai filter</p></section>'+
+   (cards?'<div class="agreement-grid">'+cards+'</div>':'<div class="panel empty">Belum ada perjanjian pada filter ini.</div>')+unlinkedPayers();
  }
  function unlinkedPayers(){
   const linked=records('pks').map(r=>r.patientPartner||(!r.patientLinkStatus?r.partner:''));
@@ -57,7 +61,7 @@ export function createOperations(ui) {
   if(!r)return;
   const status=agreementStatus(r,today());
   show('Detail PKS / MoU','<div class="ops-stack"><p>'+marker(status)+(status.version!==r?' · Berdasarkan versi '+esc(status.version.version):'')+'</p>'+
-   version(r)+'<div class="actions">'+button('Atur tautan penjamin','data-ops="link" data-ops-id="'+esc(r.id)+'"')+button('Catat perubahan','data-ops="revise" data-ops-id="'+esc(r.id)+'"','content')+
+   version(r)+'<div class="actions">'+button('Atur tautan penjamin','data-ops="link" data-ops-id="'+esc(r.id)+'"')+button('Catat adendum','data-ops="addendum" data-ops-id="'+esc(r.id)+'"')+button('Catat perubahan','data-ops="revise" data-ops-id="'+esc(r.id)+'"','content')+
    button('Catat perpanjangan','data-ops="extend" data-ops-id="'+esc(r.id)+'"','calendar',true)+'</div><h3>Riwayat versi</h3>'+
    ((r.history||[]).map(h=>'<details><summary>Versi '+esc(h.version)+' · '+esc(h.change)+' · '+fmt(h.start)+' – '+fmt(h.end)+'</summary>'+version(h)+'</details>').join('')||'<p class="sub">Belum ada riwayat.</p>')+'</div>');
  }
@@ -149,6 +153,7 @@ export function createOperations(ui) {
   if(element.form?.dataset.form==='ops-pks'&&element.id==='source-document')return documents.change(element,'agreement');
   if(element.name==='patientLinkStatus'&&element.form?.elements.patientPartner){element.form.elements.patientPartner.disabled=element.value!=='linked';if(element.value!=='linked')element.form.elements.patientPartner.value='';return true}
 
+  if(element.id==='ops-order'){agreementOrder=element.value;ui.render();return true}
   if(element.id==='ops-status'){filter=element.value;ui.render();document.querySelector('#ops-status')?.focus();return true}
   if(!current)return false;
   if(element.id==='ops-file'){
@@ -196,7 +201,7 @@ export function createOperations(ui) {
     return;
    }
    if(!allowed(mod('pks')))return;
-   if(d.ops==='document-open'){const attachment=records('pks').flatMap(r=>[r,...(r.history||[])]).map(r=>r.attachment).find(a=>a?.id===d.opsId);if(attachment)documents.open(attachment).catch(error=>document.querySelector('#cloudError').textContent=error.message);return}
+   if(d.ops==='document-open'){const attachment=records('pks').flatMap(r=>[r,...(r.history||[])]).map(r=>r.attachment).find(a=>a?.id===d.opsId);if(attachment)documents.open(attachment).catch(error=>{const area=document.querySelector('#cloudError');if(area&&area.closest('dialog')?.open)area.textContent=error.message;else show('Dokumen belum tersedia','<p>'+esc(error.message)+'</p>')});return}
 
    const r=find(d.opsId);
    if(d.ops==='new')agreement();
@@ -204,6 +209,7 @@ export function createOperations(ui) {
    if(d.ops==='detail'&&r)detail(r);
    if(d.ops==='link'&&r)linkEditor(r);
    if(d.ops==='revise'&&r)agreement(r,'Perubahan');
+   if(d.ops==='addendum'&&r)agreement(r,'Adendum');
    if(d.ops==='extend'&&r)agreement(r,'Perpanjangan');
   },
   async mutate(f,values){
