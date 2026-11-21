@@ -34,7 +34,7 @@ export function enrichPatients(rows,directory){
   if(map.has(key)&&payerKey(map.get(key))!==payerKey(entry.type))map.set(key,'Perlu diperiksa');
   else if(!map.has(key))map.set(key,entry.type);
  }
- return rows.map(row=>[...row.slice(0,13),map.get(payerKey(row[9]))||'Belum terpetakan']);
+ return rows.map(row=>[...row.slice(0,13),map.get(payerKey(row[9]))||'Belum terpetakan',row[14]??null,...row.slice(15)]);
 }
 function bucket(name){
  let hash=2166136261;for(const c of payerKey(name))hash=Math.imul(hash^c.charCodeAt(0),16777619);

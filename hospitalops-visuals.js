@@ -1,9 +1,9 @@
-const groups=[['month','Bulan masuk'],['day','Tanggal masuk'],['category','Kategori unit'],['unit','Unit / poli'],['payer','Penjamin'],['insurance','Grup jaminan'],['payerType','Tipe Penjamin'],['labExam','Jenis Pemeriksaan Lab']];
-const metrics=[['visits','Jumlah kunjungan'],['patients','Pasien unik (No RM)'],['billing','Total billing'],['claims','Total tarif e-Klaim'],['average','Rata-rata billing / kunjungan']];
+const groups=[['month','Bulan masuk'],['day','Tanggal masuk'],['category','Kategori unit'],['unit','Unit / poli'],['payer','Penjamin'],['insurance','Grup jaminan'],['payerType','Tipe Penjamin'],['labExam','Jenis Pemeriksaan Lab'],['doctor','Dokter'],['company','Perusahaan'],['careClass','Kelas perawatan'],['billStatus','Status billing']];
+const metrics=[['visits','Jumlah kunjungan'],['patients','Pasien unik (No RM)'],['billing','Total billing'],['claims','Tarif e-Klaim / InaCBGs'],['insuranceAmount','Total Asuransi'],['average','Rata-rata billing / kunjungan']];
 const types=[['bar','Diagram batang'],['line','Diagram garis'],['pie','Diagram lingkaran'],['table','Tabel ringkasan']];
-const columns={category:7,unit:8,payer:9,insurance:10,payerType:13,labExam:14};
+const columns={category:7,unit:8,payer:9,insurance:10,payerType:13,labExam:14,doctor:15,company:18,careClass:17,billStatus:27};
 const colors=['#087b63','#449ed0','#e4a83b','#8672bf','#da7b75','#48b5a1','#717e97'];
-const currency=new Set(['billing','claims','average']);
+const currency=new Set(['billing','claims','insuranceAmount','average']);
 const labelOf=(list,key)=>list.find(([id])=>id===key)?.[1]||key;
 
 export function aggregatePatients(rows,config){
@@ -14,12 +14,14 @@ export function aggregatePatients(rows,config){
    config.insurance&&r[10]!==config.insurance||config.payerType&&r[13]!==config.payerType||config.labExam&&r[14]!==config.labExam)continue;
   visits++;
   const key=config.group==='month'?r[5].slice(0,7):config.group==='day'?r[5]:r[columns[config.group]]||'Belum diisi';
-  if(!grouped.has(key))grouped.set(key,{key,visits:0,billing:0,claims:0,patients:new Set()});
+  if(!grouped.has(key))grouped.set(key,{key,visits:0,billing:0,claims:0,patients:new Set(),billingCount:0,insuranceAmount:0,insuranceCount:0});
   const group=grouped.get(key);group.visits++;group.billing+=Number(r[12])||0;group.claims+=Number(r[11])||0;
+  if(r[12]!==null&&r[12]!==undefined)group.billingCount++;
+  if(r[25]!==null&&r[25]!==undefined){group.insuranceAmount+=Number(r[25])||0;group.insuranceCount++}
   const rm=String(r[1]||'').trim();
   if(rm&&rm!=='0'&&rm!=='-')group.patients.add(rm);else missingRM++;
  }
- const result=[...grouped.values()].map(g=>({key:g.key,value:config.metric==='average'?g.billing/g.visits:
+ const result=[...grouped.values()].filter(g=>!['billing','average'].includes(config.metric)||g.billingCount>0).filter(g=>config.metric!=='insuranceAmount'||g.insuranceCount>0).map(g=>({key:g.key,value:config.metric==='average'?g.billing/g.billingCount:
   config.metric==='patients'?g.patients.size:g[config.metric]}));
  result.sort(config.sort==='category'?(a,b)=>a.key.localeCompare(b.key):
   config.sort==='ascending'?(a,b)=>a.value-b.value||a.key.localeCompare(b.key):(a,b)=>b.value-a.value||a.key.localeCompare(b.key));
@@ -43,7 +45,7 @@ export function createVisuals(ui){
   if(!result.rows.length)return '<div class="empty">Belum ada data pada filter ini.</div>';
   const pairs=result.rows.map(r=>({...r,label:groupLabel(r.key,config.group)}));
   const desc=labelOf(metrics,config.metric)+' menurut '+labelOf(groups,config.group);
-  const note='<p class="sub">'+number(result.visits)+' kunjungan · '+pairs.length+' dari '+result.groups+' kelompok'+
+  const note='<p class="sub">'+(currency.has(config.metric)?'Nilai kosong dilewati · ':'')+number(result.visits)+' kunjungan · '+pairs.length+' dari '+result.groups+' kelompok'+
    (config.metric==='patients'?' · Pasien unik dihitung per kelompok'+(result.missingRM?' · '+result.missingRM+' kunjungan tanpa No RM dilewati':''):'')+'</p>';
   if(config.type==='table')return note+table([labelOf(groups,config.group),labelOf(metrics,config.metric)],
    pairs.map(p=>'<tr><td>'+esc(p.label)+'</td><td>'+esc(format(p.value,config.metric))+'</td></tr>').join(''));

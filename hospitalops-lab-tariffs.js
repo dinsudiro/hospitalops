@@ -16,7 +16,7 @@ export function classifyLab(rows,tariffs){
   const hospital=hospitalTypes.has(payerKey(row[13]));
   const lab=/^(laboratorium|lab)(\s|$)/i.test(String(row[8]||'').trim());
   const exam=hospital&&lab?(byPrice.get(Number(row[12]))||'Belum terpetakan'):'—';
-  return [...row.slice(0,14),exam];
+  return [...row.slice(0,14),exam,...row.slice(15)];
  });
 }
 export function createLabTariffs(ui){
@@ -28,7 +28,7 @@ export function createLabTariffs(ui){
  function view(){
   const actions=button('Ref Direktori','data-nav="directory"')+button('Tambah tarif','data-lab-tariff="new"','plus',true);
   return heading('Tarif Lab B2B','Acuan pemeriksaan laboratorium untuk penjamin bertipe Mitra Rumah Sakit atau Rumah Sakit.',actions)+
-   panel('Harga kesepakatan mitra rumah sakit','Jenis pemeriksaan dicocokkan dari Total Amount Billing pada data pasien. Tarif awal Mikro Rp500.000 dan PA Rp240.000.',
+   panel('Harga kesepakatan mitra rumah sakit','Jenis pemeriksaan dicocokkan dari Total Billing pada data pasien. Tarif awal Mikro Rp500.000 dan PA Rp240.000.',
     table(['Segmen','Jenis pemeriksaan','Billing (Rp)','Status','Aksi'],entries().map(t=>'<tr><td>Rumah Sakit</td><td>'+esc(t.name)+'</td><td>'+money(t.amount)+
      '</td><td>'+(t.active?'Aktif':'Nonaktif')+'</td><td>'+button('Ubah','data-lab-tariff="edit" data-lab-tariff-id="'+esc(t.id)+'"')+'</td></tr>').join('')));
  }

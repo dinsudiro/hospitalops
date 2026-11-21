@@ -34,15 +34,16 @@ export function summarizePartners(rows,profiles=[]){
  for(const profile of profiles){
   const key=payerKey(profile.name);
   if(!key)continue;
-  if(!groups.has(key))groups.set(key,{key,name:profile.name,type:profile.type,profiles:[],rows:[],patients:new Set(),billing:0});
+  if(!groups.has(key))groups.set(key,{key,name:profile.name,type:profile.type,profiles:[],rows:[],patients:new Set(),billing:0,missingBilling:0});
   groups.get(key).profiles.push(profile);
  }
  for(const row of rows){
   const key=payerKey(row[9]);if(!key)continue;
-  if(!groups.has(key))groups.set(key,{key,name:String(row[9]).trim().replace(/\s+/g,' '),type:'Belum terpetakan',profiles:[],rows:[],patients:new Set(),billing:0});
+  if(!groups.has(key))groups.set(key,{key,name:String(row[9]).trim().replace(/\s+/g,' '),type:'Belum terpetakan',profiles:[],rows:[],patients:new Set(),billing:0,missingBilling:0});
   const group=groups.get(key);
   group.type=row[13]||'Belum terpetakan';
   group.rows.push(row);group.patients.add(patientId(row));group.billing+=Number(row[12])||0;
+  if(row[12]===null||row[12]===undefined)group.missingBilling++;
  }
  return [...groups.values()].map(g=>({...g,patientCount:g.patients.size,visitCount:g.rows.length}))
   .sort((a,b)=>b.billing-a.billing||a.name.localeCompare(b.name));
@@ -71,7 +72,7 @@ export function createPartnerPatients(ui){
    '<label>Sampai <input id="partner-patients-to" type="date" aria-label="Kunjungan sampai" value="'+esc(to)+'"></label></div>';
   return heading('Mitra B2B','Penjamin dari Data Pasien dikelompokkan otomatis menurut kategori di Ref Direktori.',
    button('Data Pasien','data-nav="patients"')+button('Tambah mitra','data-b2b="partner-new"','plus',true))+
-   panel('Daftar mitra dan realisasi','Jumlah pasien memakai No RM. Jika No RM kosong atau 0, digunakan No Registrasi. Total billing berasal dari Total Amount Billing.',
+   panel('Daftar mitra dan realisasi','Jumlah pasien memakai No RM. Jika No RM kosong atau 0, digunakan No Registrasi. Total billing berasal dari nilai Total Billing yang terisi.',
     filters+'<div id="partner-patients-results">'+results()+'</div>');
  }
  function pager(part,page,pages){
@@ -84,10 +85,10 @@ export function createPartnerPatients(ui){
   const pages=Math.max(1,Math.ceil(selected.length/size));page=Math.min(page,pages);
   const body=selected.slice((page-1)*size,page*size).map(g=>'<tr><td>'+nameButton(g)+
    '<div class="sub">'+(g.visitCount?'Data Pasien':'Profil manual')+'</div></td><td>'+esc(g.type)+'</td><td>'+
-   g.patientCount.toLocaleString('id-ID')+'</td><td>'+g.visitCount.toLocaleString('id-ID')+'</td><td>'+money(g.billing)+'</td><td>'+
+   g.patientCount.toLocaleString('id-ID')+'</td><td>'+g.visitCount.toLocaleString('id-ID')+'</td><td>'+(g.visitCount&&g.missingBilling===g.visitCount?'—':money(g.billing))+(g.missingBilling?'<div class="sub">'+g.missingBilling+' billing kosong</div>':'')+'</td><td>'+
    (g.profiles.length?g.profiles.map(profileButton).join(' '):plainButton('Lengkapi profil','profile','data-partner-key="'+esc(g.key)+'"'))+'</td></tr>').join('');
   return (from&&to&&from>to?'<p role="alert">Tanggal sampai harus sama dengan atau setelah tanggal dari.</p>':'')+
-   '<p class="sub">'+selected.length+' mitra · '+selected.reduce((s,g)=>s+g.visitCount,0).toLocaleString('id-ID')+' kunjungan · Total billing '+
+   '<p class="sub">'+selected.length+' mitra · '+selected.reduce((s,g)=>s+g.visitCount,0).toLocaleString('id-ID')+' kunjungan · Total billing terisi '+
    money(selected.reduce((s,g)=>s+g.billing,0))+'</p>'+
    partnerTable(body||'<tr><td colspan="6">Belum ada mitra yang sesuai. Unggah laporan Data Pasien untuk menampilkan penjaminnya.</td></tr>')+pager('list',page,pages);
  }
@@ -155,7 +156,7 @@ export function createPartnerPatients(ui){
   const g=find(detailKey);if(!g)return;
   const note=(from||to)?' · Periode '+(from?fmt(from):'awal data')+' – '+(to?fmt(to):'akhir data'):' · Seluruh periode';
   show('Mitra · '+g.name,'<div class="ops-stack">'+profileSummary(g)+'<h3>Pasien dan layanan</h3><p>'+esc(g.type)+note+'</p>'+
-   '<p class="sub">'+g.patientCount+' pasien · '+g.visitCount+' kunjungan · Total billing '+money(g.billing)+'</p>'+
+   '<p class="sub">'+g.patientCount+' pasien · '+g.visitCount+' kunjungan · Total billing terisi '+money(g.billing)+'</p>'+
    '<label>Cari pasien atau layanan<input id="partner-detail-query" type="search" aria-label="Cari rincian pasien" placeholder="Nama, RM, registrasi, unit, atau pemeriksaan…" value="'+esc(detailQuery)+'"></label>'+
    '<div id="partner-detail-results">'+detailResults()+'</div></div>');
   ui.wide();
@@ -168,7 +169,7 @@ export function createPartnerPatients(ui){
   return '<p class="sub">'+selected.length+' kunjungan sesuai pencarian · Billing '+money(selected.reduce((sum,r)=>sum+Number(r[12]),0))+'</p>'+
    table(['Nama pasien','No RM','No registrasi','Tanggal masuk','Unit / layanan','Pemeriksaan lab','Billing'],
     selected.slice((detailPage-1)*size,detailPage*size).map(r=>'<tr><td>'+esc(r[4])+'</td><td>'+esc(r[1]||'—')+'</td><td>'+esc(r[2])+'</td><td>'+fmt(r[5])+
-     '</td><td>'+esc(r[8])+'</td><td>'+esc(r[14]||'—')+'</td><td>'+money(r[12])+'</td></tr>').join('')||
+     '</td><td>'+esc(r[8])+'</td><td>'+esc(r[14]||'—')+'</td><td>'+(r[12]===null||r[12]===undefined?'—':money(r[12]))+'</td></tr>').join('')||
      '<tr><td colspan="7">Belum ada pasien sesuai pencarian.</td></tr>')+pager('detail',detailPage,pages);
  }
  function change(target){
