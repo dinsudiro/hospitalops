@@ -1,4 +1,4 @@
-import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-bulk1';
+import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-account1';
 import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261121-patients75';
 import {createDirectory} from './hospitalops-directory.js?v=20261121-patients75';
 import {createVisuals} from './hospitalops-visuals.js?v=20261121-patients75';
