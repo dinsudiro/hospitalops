@@ -2,7 +2,7 @@ import {payerKey} from './hospitalops-directory.js';
 
 export const cooperationTypes=['MCU','Rujukan Pasien','Rujukan Laboratorium','Rujukan Radiologi','PKRS / Edukasi','Lainnya'];
 const mouStatuses=['Belum dicatat','Belum ada','Dalam proses','Ada PKS / MoU'];
-const categorySuggestions=['Perusahaan','Asuransi','Instansi','Lembaga','Komunitas','Organisasi','Sekolah','Mitra Rumah Sakit','Mitra Faskes','Klinik','Dokter Rujukan','Bidan Rujukan','Yayasan','Lainnya'];
+const categorySuggestions=['Umum / Pribadi','BPJS Kesehatan','BPJS Ketenagakerjaan','Jasa Raharja','Perusahaan','Asuransi','Instansi','Lembaga','Komunitas','Organisasi','Sekolah','Mitra Rumah Sakit','Mitra Faskes','Klinik','Dokter Rujukan','Bidan Rujukan','Yayasan','Lainnya'];
 export function sortPartners(groups,key='billing',direction='descending'){
  const sign=direction==='ascending'?1:-1;
  const numeric=['patientCount','visitCount','billing'].includes(key);
@@ -22,6 +22,21 @@ export function partnerProfileValues(values,old={}){
  return {...old,name,type,location:text('location'),picName:text('picName'),picPhone:text('picPhone'),
   contact:text('picName'),mouStatus:values.mouStatus,agreementId:text('agreementId'),cooperations:selected,
   cooperationOther:selected.includes('Lainnya')?text('cooperationOther'):'',note:text('note')};
+}
+
+export function partnerBulkValues(items){
+ if(!items.length||items.length>50)throw Error('Pilih 1–50 mitra untuk disimpan sekaligus.');
+ const keys=new Set();
+ return items.map(({values,old={}})=>{
+  const key=payerKey(values.name);
+  if(keys.has(key))throw Error('Mitra yang sama tidak boleh muncul dua kali.');
+  keys.add(key);
+  try{return partnerProfileValues(values,old)}catch(error){throw Error(values.name+': '+error.message)}
+ });
+}
+async function stablePartnerId(name){
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(payerKey(name)));
+ return 'partner-'+[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
 const validRM=value=>value&&!/^(0+|[-—])$/.test(value);
@@ -52,6 +67,7 @@ export function createPartnerPatients(ui){
  const {rows,profiles,data,heading,panel,button,table,esc,fmt,money,options,show,label,input,select,form}=ui;
  let scope=null,query='',type='',source='',from='',to='',page=1,detailKey='',detailQuery='',detailPage=1,sortKey='billing',sortDirection='descending';
  const size=50;
+ let bulk=null,bulkBusy=false;
  const filteredRows=()=>rows().filter(r=>(!from||r[5]>=from)&&(!to||r[5]<=to));
  const groups=()=>summarizePartners(filteredRows(),profiles());
  const find=key=>groups().find(g=>g.key===key);
@@ -71,7 +87,7 @@ export function createPartnerPatients(ui){
    '<label>Dari <input id="partner-patients-from" type="date" aria-label="Kunjungan dari" value="'+esc(from)+'"></label>'+
    '<label>Sampai <input id="partner-patients-to" type="date" aria-label="Kunjungan sampai" value="'+esc(to)+'"></label></div>';
   return heading('Mitra B2B','Penjamin dari Data Pasien dikelompokkan otomatis menurut kategori di Ref Direktori.',
-   button('Data Pasien','data-nav="patients"')+button('Tambah mitra','data-b2b="partner-new"','plus',true))+
+   button('Data Pasien','data-nav="patients"')+plainButton('Edit massal','bulk-open')+button('Tambah mitra','data-b2b="partner-new"','plus',true))+
    panel('Daftar mitra dan realisasi','Jumlah pasien memakai No RM. Jika No RM kosong atau 0, digunakan No Registrasi. Total billing berasal dari nilai Total Billing yang terisi.',
     filters+'<div id="partner-patients-results">'+results()+'</div>');
  }
@@ -79,9 +95,10 @@ export function createPartnerPatients(ui){
   return '<div class="actions">'+plainButton('Sebelumnya',part+'-previous',page===1?'disabled':'')+'<span>Halaman '+page+' / '+pages+'</span>'+
    plainButton('Berikutnya',part+'-next',page===pages?'disabled':'')+'</div>';
  }
+ function selectedGroups(){return sortPartners(groups().filter(g=>(!type||g.type===type)&&payerKey(g.name+' '+g.type).includes(payerKey(query))&&
+   (!source||source==='patients'&&g.visitCount>0||source==='manual'&&g.visitCount===0)),sortKey,sortDirection)}
  function results(){
-  const selected=sortPartners(groups().filter(g=>(!type||g.type===type)&&payerKey(g.name+' '+g.type).includes(payerKey(query))&&
-   (!source||source==='patients'&&g.visitCount>0||source==='manual'&&g.visitCount===0)),sortKey,sortDirection);
+  const selected=selectedGroups();
   const pages=Math.max(1,Math.ceil(selected.length/size));page=Math.min(page,pages);
   const body=selected.slice((page-1)*size,page*size).map(g=>'<tr><td>'+nameButton(g)+
    '<div class="sub">'+(g.visitCount?'Data Pasien':'Profil manual')+'</div></td><td>'+esc(g.type)+'</td><td>'+
@@ -110,6 +127,66 @@ export function createPartnerPatients(ui){
    (p.note?'<p class="sub">'+esc(p.note)+'</p>':'')+
    '<div class="actions">'+(g.profiles.length?g.profiles.map(profileButton).join(' '):plainButton('Lengkapi profil','profile','data-partner-key="'+esc(g.key)+'"'))+'</div></section>';
  }
+ function bulkEditor(){
+  reset();
+  const list=selectedGroups(),start=(page-1)*size,visible=list.slice(start,start+size);
+  if(!visible.length){show('Edit massal mitra','<p>Belum ada mitra sesuai filter. Ubah filter atau unggah Data Pasien.</p>');return}
+  bulk={scope:ui.workspaceKey?ui.workspaceKey():data(),items:visible.map(g=>{
+   const p=g.profiles[0]||{},category=g.type!=='Belum terpetakan'?g.type:p.type||'';
+   return {key:g.key,name:g.name,old:p,category};
+  })};
+  const categories=[...new Set([...categorySuggestions,...list.map(g=>g.type).filter(t=>t&&t!=='Belum terpetakan')])];
+  const text=(i,name,value,max,type='text')=>input('bulk-'+i+'-'+name,value,type,'maxlength="'+max+'" aria-label="'+esc(name==='type'?'Kategori '+visible[i].name:name==='location'?'Alamat '+visible[i].name:name==='picName'?'Nama PIC '+visible[i].name:name==='picPhone'?'Telepon PIC '+visible[i].name:name==='cooperationOther'?'Kerja sama lainnya '+visible[i].name:'Catatan '+visible[i].name)+'" '+(name==='type'?'list="bulk-category-options"':''));
+  const body=bulk.items.map(({name,old:p,category},i)=>{
+   const prefix='bulk-'+i+'-',docs=ui.agreements();
+   const agreements=[['','Tidak ditautkan'],...docs.map(a=>[a.id,a.type+' · '+a.partner+' · '+a.name])];
+   if(p.agreementId&&!docs.some(a=>a.id===p.agreementId))agreements.push([p.agreementId,'Dokumen sebelumnya (tidak tersedia)']);
+   return '<tr data-bulk-row="'+i+'"><td><input type="checkbox" name="'+prefix+'selected" aria-label="Pilih '+esc(name)+'"></td><th scope="row">'+esc(name)+'</th><td>'+text(i,'type',category,100)+'</td><td>'+text(i,'location',p.location,400)+'</td><td>'+text(i,'picName',p.picName||p.contact,140)+'</td><td>'+text(i,'picPhone',p.picPhone,60,'tel')+'</td><td>'+select(prefix+'mouStatus',mouStatuses,mouStatuses.includes(p.mouStatus)?p.mouStatus:'Belum dicatat','aria-label="Status MoU '+esc(name)+'"')+'</td><td>'+select(prefix+'agreementId',agreements,p.agreementId||'','aria-label="Dokumen MoU '+esc(name)+'"')+'</td><td><div class="bulk-cooperations">'+cooperationTypes.map(c=>'<label><input type="checkbox" name="'+prefix+'cooperations" value="'+esc(c)+'" '+(p.cooperations?.includes(c)?'checked':'')+'>'+esc(c)+'</label>').join('')+'</div></td><td>'+text(i,'cooperationOther',p.cooperationOther,300)+'</td><td>'+text(i,'note',p.note,700)+'</td></tr>';
+  }).join('');
+  const fields='<p>Edit profil langsung di tabel. Baris yang Anda ubah otomatis dipilih. Hanya mitra terpilih yang disimpan; kategori wajib diisi.</p>'+
+   '<p class="sub">Menampilkan '+(start+1)+'–'+(start+visible.length)+' dari '+list.length+' mitra sesuai filter. Maksimal 50 mitra per penyimpanan. Untuk mitra berikutnya, simpan lalu gunakan halaman berikutnya atau filter di daftar mitra.</p>'+
+   '<div class="bulk-toolbar"><label class="check"><input id="partner-bulk-all" type="checkbox">Pilih semua di halaman ini</label><span id="partner-bulk-count" role="status">0 mitra dipilih</span>'+label('Kategori untuk mitra terpilih',input('bulk-category','','text','id="partner-bulk-category" list="bulk-category-options" maxlength="100"'))+plainButton('Terapkan kategori','bulk-apply')+'</div>'+
+   '<datalist id="bulk-category-options">'+categories.map(c=>'<option value="'+esc(c)+'"></option>').join('')+'</datalist>'+
+   '<div class="tablewrap bulk-partner-table" tabindex="0" aria-label="Tabel edit massal mitra, geser ke kanan untuk kolom profil lainnya"><table><thead><tr>'+['Pilih','Nama mitra / penjamin','Kategori mitra','Alamat','Nama PIC','Telepon PIC','Status PKS / MoU','Dokumen PKS / MoU','Jenis kerja sama','Kerja sama lainnya','Catatan'].map(c=>'<th scope="col">'+c+'</th>').join('')+'</tr></thead><tbody>'+body+'</tbody></table></div>'+
+   '<p class="sub">Geser tabel ke kanan untuk kolom lainnya. Kategori akan memperbarui Ref Direktori dan pemetaan Data Pasien. Memilih status MoU tidak membuat dokumen baru.</p>';
+  show('Edit massal mitra',form('partner-bulk-save',fields,'Simpan mitra terpilih'));
+  ui.wide();
+ }
+ function bulkSelection(){
+  const f=document.querySelector('[data-form="partner-bulk-save"]');if(!f)return;
+  const selected=f.querySelectorAll('[name$="-selected"]:checked').length;
+  f.querySelector('#partner-bulk-count').textContent=selected+' mitra dipilih';
+  const all=f.querySelector('#partner-bulk-all');all.checked=selected===bulk.items.length;all.indeterminate=selected>0&&selected<bulk.items.length;
+ }
+ async function bulkMutate(f){
+  if(bulkBusy)throw Error('Penyimpanan sedang berjalan.');
+  if(!bulk||bulk.scope!==(ui.workspaceKey?ui.workspaceKey():data()))throw Error('Organisasi berubah. Buka ulang edit massal.');
+  const workspace=data(),values=new FormData(f),items=bulk.items.flatMap((item,i)=>{
+   const prefix='bulk-'+i+'-';if(!values.has(prefix+'selected'))return [];
+   const current=profiles().find(p=>p.id===item.old.id);
+   if(item.old.id&&JSON.stringify(current)!==JSON.stringify(item.old))throw Error('Profil '+item.name+' berubah. Buka ulang edit massal.');
+   const v={name:item.name};
+   for(const k of ['type','location','picName','picPhone','mouStatus','agreementId','cooperationOther','note'])v[k]=values.get(prefix+k)||'';
+   v.cooperations=values.getAll(prefix+'cooperations');
+   return [{values:v,old:current||item.old}];
+  });
+  const updates=partnerBulkValues(items);
+  for(const next of updates){
+   const old=items.find(item=>payerKey(item.values.name)===payerKey(next.name)).old;
+   if(next.agreementId&&next.agreementId!==old.agreementId&&!ui.agreements().some(a=>a.id===next.agreementId))throw Error('Dokumen MoU '+next.name+' tidak tersedia.');
+   if(next.agreementId&&next.mouStatus==='Belum dicatat')next.mouStatus='Ada PKS / MoU';
+  }
+  bulkBusy=true;
+  try{
+   for(const next of updates)if(!next.id)next.id=await stablePartnerId(next.name);
+   if(workspace!==data())throw Error('Organisasi berubah. Buka ulang edit massal.');
+   const stored=new Map(profiles().map(p=>[p.id,p]));
+   for(const next of updates)stored.set(next.id,next);
+   data().records.partners=[...stored.values()];
+   for(const next of updates)ui.setReferenceType(next.name,next.type);
+   return {page:'partners',message:updates.length+' profil mitra dan kategori tersimpan. Pemetaan pasien diperbarui.'};
+  }finally{bulkBusy=false}
+ }
  function editor(profile,key=''){
   const g=key?find(key):profile?find(payerKey(profile.name)):null;
   const p=profile||g?.profiles[0]||{},name=p.name||g?.name||'';
@@ -134,6 +211,7 @@ export function createPartnerPatients(ui){
   ui.wide();
  }
  async function mutate(f,v){
+  if(f.dataset.form==='partner-bulk-save')return bulkMutate(f);
   const workspace=data();
   const id=f.dataset.id,old=id?profiles().find(p=>p.id===id):profiles().find(p=>payerKey(p.name)===payerKey(v.name));
   if(id&&!old)throw Error('Profil tidak ditemukan. Buka ulang mitra.');
@@ -143,8 +221,7 @@ export function createPartnerPatients(ui){
   if(next.agreementId&&!ui.agreements().some(a=>a.id===next.agreementId))throw Error('Dokumen tidak tersedia.');
   if(next.agreementId&&next.mouStatus==='Belum dicatat')next.mouStatus='Ada PKS / MoU';
   if(!next.id){
-   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(payerKey(next.name)));
-   next.id='partner-'+[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+   next.id=await stablePartnerId(next.name);
   }
   if(workspace!==data())throw Error('Organisasi berubah. Buka ulang profil mitra.');
   const existing=profiles().find(p=>p.id===next.id);
@@ -173,6 +250,14 @@ export function createPartnerPatients(ui){
      '<tr><td colspan="7">Belum ada pasien sesuai pencarian.</td></tr>')+pager('detail',detailPage,pages);
  }
  function change(target){
+  if(target.form?.dataset.form==='partner-bulk-save'){
+   if(target.id==='partner-bulk-all'){
+    target.form.querySelectorAll('[name$="-selected"]').forEach(c=>c.checked=target.checked);
+   }else if(target.closest('[data-bulk-row]')&&!target.name.endsWith('-selected')){
+    target.closest('[data-bulk-row]').querySelector('[name$="-selected"]').checked=true;
+   }
+   bulkSelection();return true;
+  }
   if(target.id==='partner-detail-query'){
    detailQuery=target.value;detailPage=1;document.getElementById('partner-detail-results').innerHTML=detailResults();return true;
   }
@@ -182,6 +267,14 @@ export function createPartnerPatients(ui){
   fields[target.id](target.value);page=1;document.getElementById('partner-patients-results').innerHTML=results();return true;
  }
  return {view,change,mutate,editor,detailByKey(key){detailKey=key;detailQuery='';detailPage=1;detail()},click(d){
+  if(d.partnerPatients==='bulk-open')return bulkEditor();
+  if(d.partnerPatients==='bulk-apply'){
+   const f=document.querySelector('[data-form="partner-bulk-save"]'),category=f?.querySelector('#partner-bulk-category').value.trim();
+   const selected=f?.querySelectorAll('[name$="-selected"]:checked');
+   if(!category||!selected?.length){document.getElementById('cloudError').textContent='Pilih mitra dan isi kategori terlebih dahulu.';return}
+   selected.forEach(c=>c.closest('tr').querySelector('[name$="-type"]').value=category);
+   document.getElementById('cloudError').textContent='';bulkSelection();return;
+  }
   if(d.partnerPatients==='profile'){
    const p=profiles().find(p=>p.id===d.profileId);
    editor(p,d.partnerKey);return;

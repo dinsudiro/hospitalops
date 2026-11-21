@@ -1,4 +1,4 @@
-import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-patients75';
+import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-bulk1';
 import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261121-patients75';
 import {createDirectory} from './hospitalops-directory.js?v=20261121-patients75';
 import {createVisuals} from './hospitalops-visuals.js?v=20261121-patients75';
@@ -268,7 +268,7 @@ const patientData=createPatients({records,data,heading,panel,button,table,esc,sh
   demo:false,wide:()=>modal.classList.add('lead-dialog')});
 const visuals=createVisuals({rows:()=>directory.patients(patientData.all()),records,data,heading,panel,button,table,label,input,select,options,esc,show,form,money,unique,
  wide:()=>modal.classList.add('lead-dialog')});
-const partnerPatients=createPartnerPatients({rows:()=>directory.patients(patientData.all()),profiles:()=>records('partners'),data,
+const partnerPatients=createPartnerPatients({rows:()=>directory.patients(patientData.all()),profiles:()=>records('partners'),data,workspaceKey:()=>state.workspace?.id,
  heading,panel,button,table,esc,fmt,money,options,show,label,input,select,form,
  agreements:()=>allowed(mod('pks'))?records('pks'):[],setReferenceType:directory.setType,wide:()=>modal.classList.add('lead-dialog')});
 const b2b=createB2B({profileEditor:partnerPatients.editor,records,data,active:id=>allowed(mod(id)),heading,panel,button,table,label,input,select,options,esc,fmt,
@@ -549,11 +549,11 @@ document.addEventListener('submit',async e=>{
  if(!workspace)return;
  const before=structuredClone(data());
  if(kind==='activity'){edit(v.module);return}
- if(kind==='partner-profile-save'||kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
+ if(kind.startsWith('partner-')||kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
   working=true;
   const submit=f.querySelector('button.primary');submit.disabled=true;
   try{
-   const result=await (kind==='partner-profile-save'?partnerPatients:kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
+   const result=await (kind.startsWith('partner-')?partnerPatients:kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
    await saveChanges(workspace,before);
    if(state.workspace!==workspace)return;
    modal.close();goto(result.page);if(result.partnerKey)partnerPatients.detailByKey(result.partnerKey);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message);

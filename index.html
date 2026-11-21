@@ -195,7 +195,7 @@ dialog::backdrop { background: #12382d75; }
 #accountError, #cloudError { color: #a62e2e; font-size: 13px; }
 #accountError:empty, #cloudError:empty { display:none; }
 </style>
-<link rel="stylesheet" href="./hospitalops-operations.css">
+<link rel="stylesheet" href="./hospitalops-operations.css?v=20261121-bulk1">
 </head>
 <body>
 <section id="account" class="account card" aria-label="Akses HospitalOps"><h1>HospitalOps</h1><p role="status">Memuat Supabase…</p></section>
@@ -205,7 +205,7 @@ dialog::backdrop { background: #12382d75; }
 </div>
 <dialog id="modal" aria-labelledby="modal-title"></dialog><div id="toast" class="toast" role="status" hidden></div>
 <script type="module">
-  import('./supabase-app.js?v=20261121-patients75').catch(() => {
+  import('./supabase-app.js?v=20261121-bulk1').catch(() => {
     document.querySelector('#account [role="status"]').textContent =
       'Supabase gagal dimuat. Periksa koneksi dan muat ulang halaman.';
   });

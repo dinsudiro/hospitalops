@@ -189,7 +189,7 @@ dialog::backdrop { background: #12382d75; }
   .panel-head { flex-wrap: wrap; }
 }
 </style>
-<link rel="stylesheet" href="./hospitalops-operations.css">
+<link rel="stylesheet" href="./hospitalops-operations.css?v=20261121-bulk1">
 </head>
 <body>
 <div class="shell">
@@ -198,7 +198,7 @@ dialog::backdrop { background: #12382d75; }
 </div>
 <dialog id="modal" aria-labelledby="modal-title"></dialog><div id="toast" class="toast" role="status" hidden></div>
 <script type="module">
-import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-patients75';
+import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-bulk1';
 import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261121-patients75';
 import {createDirectory} from './hospitalops-directory.js?v=20261121-patients75';
 import {createVisuals} from './hospitalops-visuals.js?v=20261121-patients75';
@@ -688,8 +688,8 @@ document.addEventListener('submit',async e=>{
   finally{cohortLoading=false;submit.disabled=false;submit.textContent='Muat data'}
   return;
  }
- if(kind==='partner-profile-save'||kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
-  try{const result=await (kind==='partner-profile-save'?partnerPatients:kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);save();modal.close();goto(result.page);if(result.partnerKey)partnerPatients.detailByKey(result.partnerKey);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message)}
+ if(kind.startsWith('partner-')||kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind==='patient-upload'||kind.startsWith('b2b-')||['ops-pks','ops-referral','ops-import'].includes(kind)){
+  try{const result=await (kind.startsWith('partner-')?partnerPatients:kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:kind==='patient-upload'?patientData:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);save();modal.close();goto(result.page);if(result.partnerKey)partnerPatients.detailByKey(result.partnerKey);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message)}
   catch(error){modal.querySelector('#cloudError').textContent=error.message}
   return;
  }
