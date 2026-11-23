@@ -5,13 +5,13 @@ import {norm,parseDate} from './hospitalops-import.js';
 export const patientColumns=['No','No RM','No Registrasi','No SEP','Nama Pasien','Tgl Masuk','Tgl Keluar','Kategori Unit','Unit','Penjamin','Grup Jaminan','Total Tarif Eklaims','Total Amount Billing'];
 export const companyColumns=['No','No.RM','No.Reg','Nama Pasien','Nama Dokter','Tanggal Masuk','Tanggal Keluar','UNIT','Penjamin','Hak Kelas','Kelas Perawatan','Perusahaan','No. SEP','No Pegawai/No.Polis','Nama Pegawai','Bagian','Group','Hubungan','Total Billing','Jenis_Asuransi','Total Asuransi','Total Inacbgs','Ket.'];
 const companyView=[0,1,2,4,15,5,6,8,9,16,17,18,3,19,20,21,22,23,12,24,25,26,27];
-const shortMonths={jan:1,feb:2,mar:3,apr:4,mei:5,may:5,jun:6,jul:7,agu:8,ags:8,agt:8,aug:8,sep:9,okt:10,oct:10,nop:11,nov:11,des:12,dec:12};
+const shortMonths={jan:1,feb:2,mar:3,apr:4,mei:5,may:5,jun:6,jul:7,agu:8,ags:8,agt:8,agust:8,aug:8,sep:9,okt:10,oct:10,nop:11,nov:11,des:12,dec:12};
 export async function readPatientDocument(file){
  if(!file?.size||file.size>75*1024*1024)throw Error('Pilih file Excel atau CSV maksimal 75 MB.');
  if(!/\.(xlsx|xls|csv)$/i.test(file.name))throw Error('Pilih file .xls, .xlsx, atau .csv.');
  const bytes=await file.arrayBuffer();
  return new Promise((resolve,reject)=>{
-  const worker=new Worker(new URL('./hospitalops-patient-worker.js?v=20261121-patients75',import.meta.url));
+  const worker=new Worker(new URL('./hospitalops-patient-worker.js?v=20261123-uploadfix1',import.meta.url));
   worker.onmessage=({data})=>{worker.terminate();data.error?reject(Error(data.error)):resolve(data.sections)};
   worker.onerror=()=>{worker.terminate();reject(Error('Pembacaan Excel gagal. Coba muat ulang halaman dan unggah kembali.'))};
   worker.postMessage(bytes,[bytes]);
@@ -80,7 +80,7 @@ export function patientSheets(sections){
 }
 export function parsePatientSheet(section){
  const company=section.format==='company',mapping=company?companyIndices(section.rows[section.header]):indices(section.rows[section.header]),rows=new Map(),errors=[];
- let summaries=0,duplicates=0;
+ let summaries=0,duplicates=0,conflicts=0;
  for(let index=section.header+1;index<section.rows.length;index++){
   const raw=section.rows[index],source=mapping.map(i=>raw[i]??'');
   const r=company?[source[0],source[1],source[2],source[12],source[3],source[5],source[6],categoryForUnit(source[7]),source[7],source[8],source[19],source[21],source[18]]:source;
@@ -91,24 +91,28 @@ export function parsePatientSheet(section){
   const amount=(value)=>company&&!string(value)?null:patientAmount(value);
   const amounts=[amount(r[11]),amount(r[12])];
   const badAmount=[r[11],r[12],...(company?[source[20]]:[])].some(v=>string(v)&&patientAmount(v)===null);
-  if(!string(r[2])||!string(r[4])||!string(r[7])||!string(r[8])||!dateIn||
-   (string(r[6])&&!['-','—','none','null','n/a'].includes(string(r[6]).toLowerCase())&&!dateOut)||dateOut&&dateOut<dateIn||badAmount){
-   errors.push('Baris '+(index+1)+' memiliki registrasi, nama, tanggal, kategori, unit, atau nominal yang perlu diperiksa.');
-   continue;
-  }
+  const issues=[];
+  if(!string(r[2]))issues.push('No. Registrasi kosong');
+  if(!string(r[4]))issues.push('Nama Pasien kosong');
+  if(!string(r[7])||!string(r[8]))issues.push('Kategori / Unit kosong');
+  if(!dateIn)issues.push('Tanggal Masuk tidak terbaca');
+  if(string(r[6])&&!['-','—','none','null','n/a'].includes(string(r[6]).toLowerCase())&&!dateOut)issues.push('Tanggal Keluar tidak terbaca');
+  if(dateOut&&dateOut<dateIn)issues.push('Tanggal Keluar sebelum Tanggal Masuk');
+  if(badAmount)issues.push('Nominal tidak terbaca');
+  if(issues.length){errors.push('Baris '+(index+1)+': '+issues.join('; ')+'.');continue}
   const row=r.map(string);row[5]=dateIn;row[6]=dateOut;row[11]=amounts[0];row[12]=amounts[1];
   if(company)row.push(null,null,...[source[4],source[9],source[10],source[11],source[13],source[14],source[15],source[16],source[17],source[19],
    amount(source[20]),amount(source[21]),source[22]].map((v,i)=>i===10||i===11?v:string(v)));
   const id=key(row);
   if(rows.has(id)){
    if(JSON.stringify(rows.get(id).slice(1))!==JSON.stringify(row.slice(1))){
-    errors.push('Baris '+(index+1)+' memiliki registrasi dan unit sama dengan nilai berbeda. Periksa duplikasi di file.');
+    conflicts++;errors.push('Baris '+(index+1)+' memiliki registrasi dan unit sama dengan nilai berbeda. Periksa duplikasi di file.');
    }
    duplicates++;
   }else rows.set(id,row);
  }
  if(!rows.size&&!errors.length)errors.push('Tabel belum berisi data pasien.');
- return {rows:[...rows.values()],errors,summaries,duplicates,format:company?'company':'legacy'};
+ return {rows:[...rows.values()],errors,summaries,duplicates,conflicts,format:company?'company':'legacy'};
 }
 export function createPatients(ui){
  const {records,data,heading,panel,button,table,esc,show,form,fmt,money,options}=ui;
@@ -163,7 +167,7 @@ export function createPatients(ui){
    table(displayColumns,body||'<tr><td colspan="25">Belum ada data yang sesuai. Pilih Upload Excel untuk memuat laporan.</td></tr>')+
    '<div class="actions">'+button('Sebelumnya','data-patients="previous" '+(page===1?'disabled':''))+
    '<span>Halaman '+page+' / '+pages+'</span>'+button('Berikutnya','data-patients="next" '+(page===pages?'disabled':''))+'</div>'+
-   (history?'<p class="sub">Upload terakhir '+esc(history.fileName)+' · '+history.added+' baru · '+history.updated+' diperbarui · '+history.unchanged+' sama.</p>':'');
+   (history?'<p class="sub">Upload terakhir '+esc(history.fileName)+' · '+history.added+' baru · '+history.updated+' diperbarui · '+history.unchanged+' sama.'+(history.skipped?' '+history.skipped+' baris bermasalah dilewati.':'')+'</p>':'');
  }
  function dialog(){
   pending=null;sections=[];
@@ -191,13 +195,15 @@ export function createPatients(ui){
   document.getElementById('patient-preview').innerHTML=choices+
    '<p>'+parsed.rows.length+' kunjungan terbaca · '+added+' baru · '+updated+' diperbarui · '+unchanged+' sama.</p>'+
    '<p class="sub">'+parsed.duplicates+' duplikasi identik · '+parsed.summaries+' baris total dilewati.</p>'+
-   (parsed.errors.length?'<p role="alert">'+parsed.errors.length+' baris perlu diperbaiki.</p><ul>'+parsed.errors.slice(0,5).map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul>':'')+
+   (section.warnings?.length?'<p role="status">'+section.warnings.map(esc).join(' ')+'</p>':'')+
+   (parsed.errors.length?'<p role="alert">'+parsed.errors.length+' baris perlu diperbaiki.</p><ul>'+parsed.errors.slice(0,5).map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul>'+(!parsed.conflicts&&parsed.rows.length?'<label><input type="checkbox" id="patient-skip-invalid"> Simpan '+parsed.rows.length+' baris valid saja dan lewati '+parsed.errors.length+' baris bermasalah. Baris yang dilewati tidak disimpan.</label>':''):'')+
    table(displayColumns,ui.enrich(parsed.rows.slice(0,5)).map(cells).join(''))+
    '<p class="sub">Pratinjau menampilkan hingga 5 baris. Seluruh baris valid disimpan setelah menekan Simpan.</p>';
   document.querySelector('[data-form="patient-upload"] button.primary').disabled=!!parsed.errors.length||!parsed.rows.length;
  }
  let request=0;
  async function change(target){
+  if(target.id==='patient-skip-invalid'){if(pending)pending.skipInvalid=target.checked;document.querySelector('[data-form="patient-upload"] button.primary').disabled=!pending?.rows.length||!!pending.conflicts||!!pending.errors.length&&!pending.skipInvalid;return true}
   if(target.id==='patient-sheet'){preview(Number(target.value));return true}
   if(target.id==='patient-file'){
    const current=++request,formNode=target.form,file=target.files?.[0],workspace=data();
@@ -217,7 +223,7 @@ export function createPatients(ui){
   return false;
  }
  function mutate(){
-  if(!pending||pending.scope!==data()||pending.errors.length||!pending.rows.length)throw Error('Periksa pratinjau upload terlebih dahulu.');
+  if(!pending||pending.scope!==data()||pending.conflicts||pending.errors.length&&!pending.skipInvalid||!pending.rows.length)throw Error('Periksa pratinjau upload terlebih dahulu.');
   const replace=document.getElementById('patient-mode').value==='replace';
   const stored=replace?[]:records('patient-buckets'),byId=new Map(stored.map(b=>[b.id,b]));
   const touched=new Map();
@@ -229,9 +235,9 @@ export function createPatients(ui){
   for(const [id,rows] of touched)byId.set(id,{id,rows:[...rows.values()]});
   data().records['patient-buckets']=[...byId.values()];
   const {added,updated,unchanged}=pending;
-  const history={id:ui.unique(),fileName,added,updated,unchanged,uploadedAt:new Date().toISOString()};
+  const history={id:ui.unique(),fileName,added,updated,unchanged,skipped:pending.errors.length,uploadedAt:new Date().toISOString()};
   data().records['patient-imports']=[...records('patient-imports'),history];
-  return {page:'patients',message:added+' kunjungan ditambahkan, '+updated+' diperbarui.'};
+  return {page:'patients',message:added+' kunjungan ditambahkan, '+updated+' diperbarui.'+(pending.errors.length?' '+pending.errors.length+' baris bermasalah dilewati.':'')};
  }
  return {view,change,mutate,all,sort(column,descending){sortColumn=column;sortDescending=descending;page=1;document.getElementById('patients-results').innerHTML=results()},click(d){
   if(d.patients==='upload')dialog();
