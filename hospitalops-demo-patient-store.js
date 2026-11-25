@@ -1,4 +1,4 @@
-import {patientExtraModules} from './hospitalops-patient-fields.js?v=20261125-flex1';
+import {patientExtraModules} from './hospitalops-patient-fields.js?v=20261125-journey1';
 // Keep large patient reports out of localStorage's small synchronous quota.
 const databaseName='hospitalops-demo-patient-data';
 async function connect(){
