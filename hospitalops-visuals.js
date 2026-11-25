@@ -50,6 +50,8 @@ export function createVisuals(ui){
  };
  function renderVisual(config,source=rows()){
   config={...config,metric:metricOf(config.metric)};
+  const required=[config.group?.startsWith('custom:')?config.group.slice(7):config.group==='labExam'?'patient-lab-exam':'',config.metric?.startsWith('custom:')?config.metric.slice(7):'',config.customField||'',config.labExam?'patient-lab-exam':''].filter(Boolean);
+  if(required.some(id=>!customFields().some(f=>f.id===id)))return '<p role="status">Field pada visualisasi ini telah dihapus atau dinonaktifkan. Pulihkan melalui Pengaturan Field & Formulir atau pilih field lain melalui Atur.</p>';
   const result=aggregatePatients(source,config);
   if(!result.rows.length)return '<div class="empty">Belum ada data pada filter ini.</div>';
   const pairs=result.rows.map(r=>({...r,label:groupLabel(r.key,config.group)}));

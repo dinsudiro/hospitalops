@@ -3,8 +3,8 @@ import {createDispositions} from './hospitalops-dispositions.js?v=20261121-sortc
 import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-sortcards1';
 import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261125-labcustom1';
 import {createDirectory} from './hospitalops-directory.js?v=20261125-flex1';
-import {createVisuals} from './hospitalops-visuals.js?v=20261125-labcustom1';
-import {createPatientFields,patientExtraModules} from './hospitalops-patient-fields.js?v=20261125-labcustom1';
+import {createVisuals} from './hospitalops-visuals.js?v=20261125-fielddelete1';
+import {createPatientFields,patientExtraModules} from './hospitalops-patient-fields.js?v=20261125-fielddelete1';
 import {createPatients} from './hospitalops-patients.js?v=20261125-labcustom1';
 import { createOperations } from './hospitalops-operations.js?v=20261122-pks-table1';
 import { createB2B, pipelineStages } from './hospitalops-b2b.js';
