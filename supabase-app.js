@@ -1,10 +1,10 @@
 import {installTableSorting} from './hospitalops-table-sort.js?v=20261121-sortcards1';
 import {createDispositions} from './hospitalops-dispositions.js?v=20261121-sortcards1';
 import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-sortcards1';
-import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261125-labcustom1';
-import {createDirectory} from './hospitalops-directory.js?v=20261125-flex1';
+import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261126-labfix1';
+import {createDirectory} from './hospitalops-directory.js?v=20261126-labfix1';
 import {createVisuals} from './hospitalops-visuals.js?v=20261125-fielddelete1';
-import {createPatientFields,patientExtraModules} from './hospitalops-patient-fields.js?v=20261125-fielddelete1';
+import {createPatientFields,patientExtraModules} from './hospitalops-patient-fields.js?v=20261126-labfix1';
 import {createPatients} from './hospitalops-patients.js?v=20261125-labcustom1';
 import { createOperations } from './hospitalops-operations.js?v=20261122-pks-table1';
 import { createB2B, pipelineStages } from './hospitalops-b2b.js';
@@ -264,13 +264,13 @@ function settings(){
  return heading('Pengaturan Modul','Aktifkan modul atau tambah modul sesuai kebutuhan organisasi.',button('Tambah modul','data-action="module"','plus',true))+panel('Modul Organisasi','Atur visibilitas menu untuk '+org().name+'.',[...modules,...data().custom].filter(m=>m[0]!=='overview'&&m[0]!=='settings').map(m=>'<div class="settings-row"><div><strong>'+esc(m[1])+'</strong><div class="sub">'+esc(m[3])+'</div></div><label><input type="checkbox" data-toggle-module="'+esc(m[0])+'" '+(!data().disabled.includes(m[0])?'checked':'')+'> Aktif</label></div>').join(''));
 }
 const modal=document.querySelector('#modal');
-const labTariffs=createLabTariffs({records,data,heading,panel,button,table,esc,label,input,select,show,form,money,unique,examOptions:()=>patientFields.labField().options});
+const labTariffs=createLabTariffs({records,data,heading,panel,button,table,esc,label,input,select,show,form,money,unique,page:()=>page,examOptions:()=>patientFields.labField().options});
 const directory=createDirectory({records,data,heading,panel,button,table,esc,label,input,show,form,
- wide:()=>modal.classList.add('lead-dialog'),enrichLab:rows=>patientFields.enrichLab(labTariffs.enrich(rows))});
+ wide:()=>modal.classList.add('lead-dialog'),labPanel:labTariffs.referencePanel,enrichLab:rows=>patientFields.enrichLab(labTariffs.enrich(rows))});
 function patientFieldsDisplay(v){return v===null||v===undefined?'—':Array.isArray(v)?v.join('; '):typeof v==='boolean'?v?'Ya':'Tidak':String(v)}
 const patientData=createPatients({records,data,heading,panel,button,table,esc,show,form,fmt,money,options,unique,enrich:directory.patients,previewEnrich:labTariffs.enrich,customFields:()=>patientFields.fields(),readCustom:(r,f)=>f?patientFields.valueFor(r,f):null,formatCustom:patientFieldsDisplay,writeCustomBatch:items=>patientFields.putBatch(items),putReferences:directory.put,references:directory.entries,detail:row=>patientFields.detail(row),actor:()=>currentUser?.email||previewRole,
   demo:false,wide:()=>modal.classList.add('lead-dialog')});
-const patientFields=createPatientFields({records,data,heading,panel,button,table,label,input,select,options,esc,show,form,fmt,unique,rows:()=>directory.patients(patientData.all()),labAutomatic:row=>labTariffs.enrich([row])[0][14],goto,close:()=>modal.close(),actor:()=>currentUser?.email||previewRole,wide:()=>modal.classList.add('lead-dialog')});
+const patientFields=createPatientFields({records,data,heading,panel,button,table,label,input,select,options,esc,show,form,fmt,unique,rows:()=>directory.patients(patientData.all()),labAutomatic:row=>labTariffs.enrich([row])[0][14],labExplain:labTariffs.explain,goto,close:()=>modal.close(),actor:()=>currentUser?.email||previewRole,wide:()=>modal.classList.add('lead-dialog')});
 const visuals=createVisuals({rows:()=>patientFields.hydrate(directory.patients(patientData.all())),customFields:()=>patientFields.fields().filter(f=>f.scope!=='program'),records,data,heading,panel,button,table,label,input,select,options,esc,show,form,money,unique,
  wide:()=>modal.classList.add('lead-dialog')});
 const partnerPatients=createPartnerPatients({rows:()=>directory.patients(patientData.all()),profiles:()=>records('partners'),data,workspaceKey:()=>state.workspace?.id,
@@ -568,11 +568,11 @@ document.addEventListener('submit',async e=>{
  if(!workspace)return;
  const before=structuredClone(data());
  if(kind==='activity'){edit(v.module);return}
- if(kind==='disposition-save'||kind.startsWith('partner-')||kind==='lab-tariff-save'||kind.startsWith('directory-')||kind.startsWith('visual-')||kind.startsWith('patient-')||kind.startsWith('b2b-')||['ops-pks','ops-pks-link','ops-referral','ops-import'].includes(kind)){
+ if(kind==='disposition-save'||kind.startsWith('partner-')||kind.startsWith('lab-tariff-')||kind.startsWith('directory-')||kind.startsWith('visual-')||kind.startsWith('patient-')||kind.startsWith('b2b-')||['ops-pks','ops-pks-link','ops-referral','ops-import'].includes(kind)){
   working=true;
   const submit=f.querySelector('button.primary');submit.disabled=true;
   try{
-   const result=await (kind==='disposition-save'?dispositions:kind.startsWith('partner-')?partnerPatients:kind==='lab-tariff-save'?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:['patient-upload','patient-undo'].includes(kind)?patientData:kind.startsWith('patient-')?patientFields:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
+   const result=await (kind==='disposition-save'?dispositions:kind.startsWith('partner-')?partnerPatients:kind.startsWith('lab-tariff-')?labTariffs:kind.startsWith('directory-')?directory:kind.startsWith('visual-')?visuals:['patient-upload','patient-undo'].includes(kind)?patientData:kind.startsWith('patient-')?patientFields:kind.startsWith('b2b-')?b2b:operations).mutate(f,v);
    await saveChanges(workspace,before);
    if(state.workspace!==workspace)return;
    modal.close();goto(result.page);if(result.patientKey)patientFields.detailByKey(result.patientKey);if(result.partnerKey)partnerPatients.detailByKey(result.partnerKey);if(result.opportunityId)b2b.detailById(result.opportunityId);toast(result.message);

@@ -70,7 +70,7 @@ export function createDirectory(ui){
  function view(){
   if(scope!==data()){scope=data();query='';page=1;pending=null;sortColumn=0;sortDescending=false}
   return heading('Ref Direktori','Referensi nama penjamin dan Tipe Penjamin untuk Data Pasien.',button('Tarif Lab B2B','data-nav="lab-tariffs"')+action('Upload Ref','upload')+action('Tambah referensi','new','',true))+
-   panel('Direktori penjamin','Perubahan tipe langsung digunakan oleh tabel dan visualisasi pasien.',
+   (ui.labPanel?.()||'')+panel('Direktori penjamin','Perubahan tipe langsung digunakan oleh tabel dan visualisasi pasien.',
     '<div class="filters"><input id="directory-query" aria-label="Cari referensi" type="search" placeholder="Cari penjamin atau tipe…" value="'+esc(query)+'"></div>'+
     '<div id="directory-results">'+results()+'</div>');
  }
