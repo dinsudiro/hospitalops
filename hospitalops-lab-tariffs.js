@@ -28,14 +28,14 @@ export function createLabTariffs(ui){
  function view(){
   const actions=button('Ref Direktori','data-nav="directory"')+button('Tambah tarif','data-lab-tariff="new"','plus',true);
   return heading('Tarif Lab B2B','Acuan pemeriksaan laboratorium untuk penjamin bertipe Mitra Rumah Sakit atau Rumah Sakit.',actions)+
-   panel('Harga kesepakatan mitra rumah sakit','Jenis pemeriksaan dicocokkan dari Total Billing pada data pasien. Tarif awal Mikro Rp500.000 dan PA Rp240.000.',
+   panel('Harga kesepakatan mitra rumah sakit','Jenis pemeriksaan dicocokkan dari Total Billing pada data pasien. Tarif awal Mikro Rp500.000 dan PA Rp240.000. Pilihan jenis pemeriksaan dikelola pada custom field di Pengaturan Field & Formulir.',
     table(['Segmen','Jenis pemeriksaan','Billing (Rp)','Status','Aksi'],entries().map(t=>'<tr><td>Rumah Sakit</td><td>'+esc(t.name)+'</td><td>'+money(t.amount)+
      '</td><td>'+(t.active?'Aktif':'Nonaktif')+'</td><td>'+button('Ubah','data-lab-tariff="edit" data-lab-tariff-id="'+esc(t.id)+'"')+'</td></tr>').join('')));
  }
  function edit(t){
   show(t?'Ubah tarif lab B2B':'Tambah tarif lab B2B',form('lab-tariff-save',
    '<p class="sub">Segmen rumah sakit. Perubahan tarif akan langsung digunakan untuk klasifikasi data pasien.</p>'+
-   label('Jenis pemeriksaan',select('name',['Mikro','PA'],t?.name||'Mikro'))+
+   label('Jenis pemeriksaan',select('name',[...new Set([...(ui.examOptions?.()||['Mikro','PA']),...(t?.name?[t.name]:[])])],t?.name||ui.examOptions?.()[0]||'Mikro'))+
    label('Total billing (Rp)',input('amount',t?.amount??'','number','required min="1" max="1000000000000" step="0.01"'))+
    label('Status',select('active',[['true','Aktif'],['false','Nonaktif']],String(t?.active??true))),
    'Simpan tarif','data-id="'+esc(t?.id||'')+'"'));
@@ -43,7 +43,7 @@ export function createLabTariffs(ui){
  function mutate(f,v){
   const id=f.dataset.id,old=entries().find(t=>t.id===id),amount=Number(v.amount),active=v.active==='true';
   if(id&&!old)throw Error('Tarif tidak ditemukan.');
-  if(!['Mikro','PA'].includes(v.name)||!Number.isFinite(amount)||amount<=0||amount>1e12||!['true','false'].includes(v.active)){
+  if(!(ui.examOptions?.()||['Mikro','PA']).includes(v.name)||!Number.isFinite(amount)||amount<=0||amount>1e12||!['true','false'].includes(v.active)){
    throw Error('Isi jenis pemeriksaan dan total billing dalam rupiah.');
   }
   if(active&&entries().some(t=>t.id!==id&&t.active&&Number(t.amount)===amount)){

@@ -30,13 +30,13 @@ export function createPatients(ui){
  let sortColumn=5,sortDescending=true;
  const enriched=()=>ui.enrich(all());
  const extraColumns=()=>ui.customFields().filter(f=>f.scope!=='program'&&(!category||!f.category||f.category===category));
- const displayColumns=()=>[...companyColumns,'Tipe Penjamin','Jenis Pemeriksaan Lab','Kategori Sumber',...extraColumns().map(f=>f.label)];
+ const displayColumns=()=>[...companyColumns,'Tipe Penjamin','Kategori Sumber',...extraColumns().map(f=>f.label)];
  const all=()=>records('patient-buckets').flatMap(b=>b.rows||[]);
  function sync(){
   if(scope!==data()){scope=data();query='';category='';unit='';payor='';payerType='';labExam='';from='';to='';page=1;pending=null;sortColumn=5;sortDescending=true}
  }
  function view(){
-  sync();
+  sync();if(!ui.customFields().some(f=>f.id==='patient-lab-exam'))labExam='';
   const list=enriched();
   const choices=(col,first)=>options([['',first],...[...new Set(list.map(r=>r[col]))].filter(Boolean).sort()],col===7?category:col===8?unit:col===13?payerType:col===14?labExam:payor);
   const filters='<div class="filters"><input id="patients-query" aria-label="Cari pasien" type="search" placeholder="Cari nama, RM, registrasi, atau penjamin…" value="'+esc(query)+'">'+
@@ -44,7 +44,7 @@ export function createPatients(ui){
    '<select id="patients-unit" aria-label="Unit layanan">'+choices(8,'Semua unit')+'</select>'+
    '<select id="patients-payor" aria-label="Jenis asuransi">'+choices(10,'Semua jenis asuransi')+'</select>'+
    '<select id="patients-type" aria-label="Tipe Penjamin">'+choices(13,'Semua tipe penjamin')+'</select>'+
-   '<select id="patients-lab-exam" aria-label="Jenis Pemeriksaan Lab">'+choices(14,'Semua pemeriksaan lab')+'</select>'+
+   (ui.customFields().some(f=>f.id==='patient-lab-exam')?'<select id="patients-lab-exam" aria-label="'+esc(ui.customFields().find(f=>f.id==='patient-lab-exam').label)+'">'+choices(14,'Semua '+ui.customFields().find(f=>f.id==='patient-lab-exam').label)+'</select>':'')+
    '<label>Dari <input id="patients-from" aria-label="Tanggal masuk dari" type="date" value="'+esc(from)+'"></label>'+
    '<label>Sampai <input id="patients-to" aria-label="Tanggal masuk sampai" type="date" value="'+esc(to)+'"></label></div>';
   return heading('Data Pasien','Unggah laporan Excel untuk memperbarui data pasien dan pendapatan.',button('Upload Excel','data-patients="upload"','content',true))+
@@ -55,10 +55,10 @@ export function createPatients(ui){
   const text=query.toLowerCase();
   return enriched().filter(r=>(!category||r[7]===category)&&(!unit||r[8]===unit)&&(!payor||r[10]===payor)&&(!payerType||r[13]===payerType)&&(!labExam||r[14]===labExam)&&
    (!from||r[5]>=from)&&(!to||r[5]<=to)&&[r[1],r[2],r[4],r[9]].join(' ').toLowerCase().includes(text))
-   .sort((a,b)=>compareSortValues(sortColumn>=26?ui.readCustom(a,extraColumns()[sortColumn-26]):sortColumn===25?a[7]:a[sortColumn<23?companyView[sortColumn]:sortColumn===23?13:14],sortColumn>=26?ui.readCustom(b,extraColumns()[sortColumn-26]):sortColumn===25?b[7]:b[sortColumn<23?companyView[sortColumn]:sortColumn===23?13:14],sortDescending)||a[2].localeCompare(b[2]));
+   .sort((a,b)=>compareSortValues(sortColumn>=25?ui.readCustom(a,extraColumns()[sortColumn-25]):sortColumn===24?a[7]:a[sortColumn<23?companyView[sortColumn]:13],sortColumn>=25?ui.readCustom(b,extraColumns()[sortColumn-25]):sortColumn===24?b[7]:b[sortColumn<23?companyView[sortColumn]:13],sortDescending)||a[2].localeCompare(b[2]));
  }
  function cells(row,index,previewValues={}){
-  const view=[...companyView.map(i=>row[i]),row[13],row[14],row[7],...extraColumns().map(f=>ui.formatCustom(previewValues[f.id]??ui.readCustom(row,f)))];
+  const view=[...companyView.map(i=>row[i]),row[13],row[7],...extraColumns().map(f=>ui.formatCustom(previewValues[f.id]??ui.readCustom(row,f)))];
   return '<tr>'+view.map((v,i)=>'<td>'+(i===3?'<button type="button" class="rowbtn" data-patients="detail" data-patient-key="'+esc(key(row))+'">'+esc(v||'—')+'</button>':esc(i===0?row[0]||index+1:i===5||i===6?fmt(v):
    [18,20,21].includes(i)?v===null||v===undefined?'—':money(v):v||'—'))+'</td>').join('')+'</tr>';
  }

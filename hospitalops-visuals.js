@@ -36,7 +36,7 @@ export function aggregatePatients(rows,config){
 export function createVisuals(ui){
  const {rows,records,data,heading,panel,button,table,label,input,select,options,esc,show,form,money,unique}=ui;
  const customFields=()=>ui.customFields?.()||[];
- const groupChoices=()=>[...groups,...customFields().map(f=>['custom:'+f.id,'Field: '+f.label])];
+ const groupChoices=()=>[...groups.filter(([id])=>id!=='labExam'),...customFields().map(f=>['custom:'+f.id,'Field: '+f.label])];
  const metricChoices=()=>[...metrics,...customFields().filter(f=>f.type==='number').map(f=>['custom:'+f.id,'Jumlah nilai: '+f.label])];
  const number=value=>Number(value).toLocaleString('id-ID',{maximumFractionDigits:2});
  const format=(value,metric)=>currency.has(metric)?money(Math.round(value*100)/100):number(value);
@@ -53,10 +53,10 @@ export function createVisuals(ui){
   const result=aggregatePatients(source,config);
   if(!result.rows.length)return '<div class="empty">Belum ada data pada filter ini.</div>';
   const pairs=result.rows.map(r=>({...r,label:groupLabel(r.key,config.group)}));
-  const desc=labelOf(metricChoices(),config.metric)+' menurut '+labelOf(groupChoices(),config.group);
+  const desc=labelOf(metricChoices(),config.metric)+' menurut '+labelOf(groupChoices(),config.group==='labExam'?'custom:patient-lab-exam':config.group);
   const note='<p class="sub">'+(currency.has(config.metric)?'Nilai kosong dilewati · ':'')+number(result.visits)+' kunjungan · '+pairs.length+' dari '+result.groups+' kelompok'+
    (config.metric==='patients'?' · Pasien unik dihitung per kelompok'+(result.missingRM?' · '+result.missingRM+' kunjungan tanpa No RM dilewati':''):'')+'</p>';
-  if(config.type==='table')return note+table([labelOf(groupChoices(),config.group),labelOf(metricChoices(),config.metric)],
+  if(config.type==='table')return note+table([labelOf(groupChoices(),config.group==='labExam'?'custom:patient-lab-exam':config.group),labelOf(metricChoices(),config.metric)],
    pairs.map(p=>'<tr><td>'+esc(p.label)+'</td><td>'+esc(format(p.value,config.metric))+'</td></tr>').join(''));
   if(config.type==='pie'){
    if(pairs.some(p=>p.value<0))return note+'<p role="status">Terdapat nilai negatif. Gunakan diagram batang, garis, atau tabel.</p>';
@@ -99,7 +99,7 @@ export function createVisuals(ui){
   const source=rows();
   const list=saved().filter(r=>!r.archived).sort((a,b)=>Number(a.order)-Number(b.order)||a.id.localeCompare(b.id));
   const empty='<div class="empty">Tambahkan visualisasi, lalu pilih bentuk, kelompok data, nilai, dan filter.</div>';
-  const cards=list.map(c=>panel(c.name,labelOf(metricChoices(),metricOf(c.metric))+' · '+labelOf(groupChoices(),c.group),
+  const cards=list.map(c=>panel(c.name,labelOf(metricChoices(),metricOf(c.metric))+' · '+labelOf(groupChoices(),c.group==='labExam'?'custom:patient-lab-exam':c.group),
    renderVisual(c,source),act('Atur','edit',c.id))).join('');
   const archived=saved().filter(r=>r.archived);
   return heading('Visualisasi Data','Susun dashboard dari tabel Data Pasien. Pendapatan memakai Total Asuransi. Setiap visualisasi memiliki pengaturan dan filter sendiri.',act('Tambah visualisasi','new','',true))+
@@ -112,7 +112,7 @@ export function createVisuals(ui){
   const c={...(config||defaultConfig()),metric:metricOf(config?.metric||defaultConfig().metric)},categories=[...new Set(source.map(r=>r[7]))].filter(Boolean).sort(),insurances=[...new Set(source.map(r=>r[10]))].filter(Boolean).sort();
   const controls='<div class="ops-grid">'+label('Judul visualisasi',input('name',c.name,'text','required maxlength="100"'))+
    label('Bentuk visualisasi',select('type',types,c.type))+
-   label('Kelompok data',select('group',groupChoices(),c.group))+
+   label('Kelompok data',select('group',groupChoices(),c.group==='labExam'?'custom:patient-lab-exam':c.group))+
    label('Nilai yang dihitung',select('metric',metricChoices(),c.metric))+
    label('Urutkan',select('sort',[['category','Kategori / waktu A–Z'],['descending','Nilai terbesar'],['ascending','Nilai terkecil']],c.sort))+
    label('Jumlah kelompok',input('limit',c.limit,'number','required min="1" max="30" step="1"'))+
@@ -121,7 +121,7 @@ export function createVisuals(ui){
    label('Kategori unit',select('category',[['','Semua kategori'],...new Set([...categories,...(c.category?[c.category]:[])])],c.category))+
    label('Grup jaminan',select('insurance',[['','Semua grup jaminan'],...new Set([...insurances,...(c.insurance?[c.insurance]:[])])],c.insurance))+
    label('Tipe Penjamin',select('payerType',[['','Semua tipe penjamin'],...new Set([...source.map(r=>r[13]||'Belum terpetakan'),...(c.payerType?[c.payerType]:[])])],c.payerType||''))+
-   label('Jenis Pemeriksaan Lab',select('labExam',[['','Semua pemeriksaan lab'],...new Set([...source.map(r=>r[14]||'—'),...(c.labExam?[c.labExam]:[])])],c.labExam||''))+
+   (c.labExam?label('Filter lab tersimpan (lama)',select('labExam',[['','Semua pemeriksaan lab'],...new Set([...source.map(r=>r[14]||'—'),...(c.labExam?[c.labExam]:[])])],c.labExam||'')):'')+
    label('Filter custom field',select('customField',[['','Tanpa filter custom'],...customFields().map(f=>[f.id,f.label])],c.customField||''))+
    label('Nilai custom sama dengan',input('customValue',c.customValue||'','text','maxlength="2000" placeholder="Contoh: Surgical; Ya; 2026-11-25"'))+
    label('Posisi di dashboard',input('order',c.order||1,'number','required min="1" max="999" step="1"'))+'</div>'+

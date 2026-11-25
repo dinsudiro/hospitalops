@@ -1,5 +1,7 @@
 import {clean,matchKey,sourceCategories,sourceCategory,patientKey,visitKey,hashKey,applies,coerceFieldValue,patientDate} from './hospitalops-patient-model.js?v=20261125-flex1';
 export const patientExtraModules=['patient-extra-buckets','patient-programs','patient-control-logs','patient-change-log','patient-treatment-directory'];
+export const labFieldId='patient-lab-exam';
+const defaultLabField={id:labFieldId,label:'Jenis Pemeriksaan Lab',type:'select',scope:'visit',category:'',unitContains:'LAB',payerType:'',options:['Mikro','PA'],order:50,required:false,active:true,automatic:true,searchable:true};
 export const fieldTypes=[['text','Teks singkat'],['textarea','Catatan panjang'],['number','Angka'],['date','Tanggal'],['select','Pilihan tunggal'],['multiselect','Pilihan jamak'],['checkbox','Ya / Tidak']];
 export const fieldScopes=[['patient','Pasien (lintas kunjungan)'],['visit','Kunjungan / episode'],['program','Program tindak lanjut']];
 export function extraEntity(field,row,programId=''){return field.scope==='patient'?patientKey(row):field.scope==='program'?'program:'+programId:'visit:'+visitKey(row)}
@@ -16,7 +18,11 @@ export function patientJourney(rows,anchorKey='',today=new Intl.DateTimeFormat('
 }
 export function createPatientFields(ui){
  const {records,data,heading,panel,button,table,label,input,select,options,esc,show,form,fmt,unique}=ui;
- const fields=()=>records('patient-field-definitions');
+ const fields=()=>[...(!records('patient-field-definitions').some(f=>f.id===labFieldId)?[{...defaultLabField,options:[...defaultLabField.options]}]:[]),...records('patient-field-definitions')];
+ const labField=()=>fields().find(f=>f.id===labFieldId);
+ const storedValue=(row,field,programId='')=>valueIndex().get(extraEntity(field,row,programId))?.values?.[field.id]??null;
+ function automaticLab(row){const f=labField();if(f.active===false||f.automatic===false||!applies(f,row))return null;const value=ui.labAutomatic?.(row)??row[14];return f.options.includes(value)?value:null;}
+ const labOrigin=row=>storedValue(row,labField())!==null?'Manual / impor':'Otomatis';
  const active=()=>fields().filter(f=>f.active!==false).sort((a,b)=>Number(a.order)-Number(b.order));
  const all=()=>ui.rows();
  const rowByKey=key=>all().find(r=>visitKey(r)===key);
@@ -25,7 +31,7 @@ export function createPatientFields(ui){
  const textarea=(name,value,extra='')=>'<textarea name="'+name+'" '+extra+'>'+esc(value||'')+'</textarea>';
  let cachedBuckets=null,cachedData=null,cachedValues;
  function valueIndex(){const buckets=records('patient-extra-buckets');if(cachedBuckets!==buckets||cachedData!==data()){cachedBuckets=buckets;cachedData=data();cachedValues=new Map(buckets.flatMap(b=>b.rows||[]).map(r=>[r.id,r]));}return cachedValues}
- function valueFor(row,field,programId=''){return valueIndex().get(extraEntity(field,row,programId))?.values?.[field.id]??null}
+ function valueFor(row,field,programId=''){return storedValue(row,field,programId)??(field.id===labFieldId?automaticLab(row):null)}
  function recordChange(entity,changes){if(!changes.length)return;data().records['patient-change-log']=[...records('patient-change-log'),{id:unique(),entity,at:new Date().toISOString(),actor:actor(),changes}]}
  function putValues(row,values,programId='',origin='manual'){
   const affected=new Map(),existing=valueIndex();
@@ -43,7 +49,7 @@ export function createPatientFields(ui){
  function putBatch(items){
   if(!items.length)return;const existing=valueIndex(),next=new Map(existing),defs=new Map(fields().map(f=>[f.id,f]));let changed=0;
   for(const item of items)for(const [id,value] of Object.entries(item.values)){
-   const f=defs.get(id);if(!f||f.scope==='program'||value===null)continue;const entity=extraEntity(f,item.row);const old=next.get(entity)||{id:entity,values:{}};
+   const f=defs.get(id);if(!f||f.scope==='program'||value===null)continue;if(id===labFieldId&&existing.get(extraEntity(f,item.row))?.values?.[id]!=null)continue;const entity=extraEntity(f,item.row);const old=next.get(entity)||{id:entity,values:{}};
    if(JSON.stringify(old.values[id]??null)===JSON.stringify(value))continue;next.set(entity,{...old,values:{...old.values,[id]:value},updatedAt:new Date().toISOString(),updatedBy:actor()});changed++;
   }
   if(!changed)return;const buckets=new Map();for(const value of next.values()){const id=hashKey(value.id,'extra-');if(!buckets.has(id))buckets.set(id,{id,rows:[]});buckets.get(id).rows.push(value)}data().records['patient-extra-buckets']=[...buckets.values()];recordChange('import-custom',[{label:'Isian custom dari upload',from:null,to:changed}]);
@@ -51,6 +57,7 @@ export function createPatientFields(ui){
  function controls(list,row,programId=''){
   return '<div class="ops-grid">'+list.map(f=>{
    const v=valueFor(row,f,programId),name='cf-'+f.id,required=f.required?'required':'';let control;
+   if(f.id===labFieldId){const manual=storedValue(row,f)!==null;return '<div>'+label('Pengisian '+f.label,select('labMode',[['auto','Otomatis dari aturan tarif'],['manual','Isi / koreksi manual']],manual?'manual':'auto','data-lab-mode'))+label(f.label,input(name,v??'','text','list="lab-field-options" autocomplete="off" maxlength="150" '+(!manual?'disabled':'')+' '+(manual?required:''))+'<datalist id="lab-field-options">'+[...new Set([...(f.options||[]),...(v?[v]:[])])].map(o=>'<option value="'+esc(o)+'"></option>').join('')+'</datalist><span class="sub">'+esc(labOrigin(row))+' · Per kunjungan. Koreksi tetap tersimpan saat upload ulang.</span>')+'</div>'; }
    if(f.type==='select')control=select(name,[['','Pilih…'],...(f.options||[]),...(v&&!(f.options||[]).includes(v)?[[v,v+' (nilai lama)']]:[])],v||'',required);
    else if(f.type==='multiselect')control='<select name="'+name+'" multiple '+required+' aria-label="'+esc(f.label)+'">'+(f.options||[]).map(vv=>'<option value="'+esc(vv)+'" '+(Array.isArray(v)&&v.includes(vv)?'selected':'')+'>'+esc(vv)+'</option>').join('')+'</select>';
    else if(f.type==='checkbox')control=select(name,[['','Belum diisi'],['true','Ya'],['false','Tidak']],v===null?'':String(v),required);
@@ -60,7 +67,7 @@ export function createPatientFields(ui){
   }).join('')+'</div>';
  }
  function formValues(f,row,scopes,programId=''){
-  const vals={};for(const field of active().filter(x=>scopes.includes(x.scope)&&applies(x,row))){const name='cf-'+field.id,raw=field.type==='multiselect'?Array.from(f.elements.namedItem(name)?.selectedOptions||[]).map(o=>o.value):f.elements.namedItem(name)?.value;const value=coerceFieldValue(field,raw);if(field.required&&(value===null||Array.isArray(value)&&!value.length))throw Error('Lengkapi '+field.label+'.');vals[field.id]=value;}return vals;
+  const vals={};for(const field of active().filter(x=>scopes.includes(x.scope)&&applies(x,row))){const name='cf-'+field.id,raw=field.id===labFieldId&&f.elements.namedItem('labMode')?.value==='auto'?automaticLab(row):field.type==='multiselect'?Array.from(f.elements.namedItem(name)?.selectedOptions||[]).map(o=>o.value):f.elements.namedItem(name)?.value;const value=coerceFieldValue(field,raw);if(field.required&&(value===null||Array.isArray(value)&&!value.length))throw Error('Lengkapi '+field.label+'.');vals[field.id]=value;}return vals;
  }
  function sourcesPanel(){return panel('Kategori sumber pasien','Acuan unit → Rajal, Ranap, IGD, Penunjang, atau Tindakan. Ref yang diunggah digunakan lintas menu.',act('Tambah pemetaan unit','source-new')+table(['Unit / layanan','Kategori sumber','Aksi'],records('patient-source-directory').map(r=>'<tr><td>'+esc(r.unit)+'</td><td>'+esc(r.category)+'</td><td>'+act('Ubah','source-edit',r.id)+'</td></tr>').join('')||'<tr><td colspan="3">Belum ada acuan. Upload workbook Raw + Ref melalui Data Pasien, atau tambahkan pemetaan.</td></tr>'))}
  function view(){
@@ -79,6 +86,7 @@ export function createPatientFields(ui){
    label('Urutan',input('order',f.order,'number','required min="1" max="999"'))+
    label('Isian wajib',select('required',[['false','Opsional'],['true','Wajib']],String(!!f.required)))+
    label('Status',select('active',[['true','Aktif'],['false','Nonaktif']],String(f.active!==false)))+'</div>'+
+   (f.id===labFieldId?label('Pengisian otomatis dari tarif mitra RS',select('automatic',[['true','Aktif'],['false','Nonaktif']],String(f.automatic!==false)))+'<p class="sub">Aturan nilai mengikuti Tarif Lab B2B (Total Billing + penjamin rumah sakit). Koreksi manual tetap diprioritaskan.</p>':'')+
    label('Pilihan jawaban (satu per baris; untuk pilihan tunggal/jamak)',textarea('options',(f.options||[]).join('\n'),'maxlength="4000"'))+
    '<p class="sub">ID field tetap saat nama, urutan, pilihan, atau aturan layanan diubah. Jenis dan tingkat penyimpanan field lama dikunci untuk menjaga data.</p>','Simpan field','data-id="'+esc(old?.id||'')+'"'));ui.wide();
  }
@@ -102,7 +110,7 @@ export function createPatientFields(ui){
    form('patient-extra-save','<h3>Data kunjungan / perawatan</h3>'+(list.length?controls(list,row):'<p>Tambahkan field jenis perawatan melalui Pengaturan Field & Formulir.</p>')+procedureControl(row),'Simpan isian','data-key="'+esc(key)+'"')+
    '<div class="actions">'+act('Atur custom field','settings')+act('Atur daftar tindakan','treatments')+'</div><section id="patient-journey">'+journeyPanel(j)+'</section><section id="patient-service-detail"></section><details><summary>Riwayat kunjungan pasien · '+j.related.length+'</summary>'+historyRows(j.related)+'</details><details><summary>Riwayat perubahan isian</summary>'+audit([pk,'visit:'+key])+'</details></div>');ui.wide();
  }
- function change(t){if(t.hasAttribute('data-patient-episode')&&currentDetail){const j=patientJourney(currentDetail.j.related,t.value);currentDetail.j=j;document.querySelector('#patient-journey').innerHTML=journeyPanel(j);document.querySelector('#patient-service-detail').innerHTML='';return true}
+ function change(t){if(t.hasAttribute('data-lab-mode')){const control=t.closest('form').elements.namedItem('cf-'+labFieldId);control.disabled=t.value==='auto';control.required=t.value==='manual'&&!!labField().required;if(t.value==='manual')control.focus();return true}if(t.hasAttribute('data-patient-episode')&&currentDetail){const j=patientJourney(currentDetail.j.related,t.value);currentDetail.j=j;document.querySelector('#patient-journey').innerHTML=journeyPanel(j);document.querySelector('#patient-service-detail').innerHTML='';return true}
  const form=t.closest('form[data-form="patient-extra-save"]'),procedure=form?.querySelector('[data-treatment-parent]');if(procedure&&t.name===procedure.dataset.treatmentParent){procedure.value='';procedure.disabled=!t.value;form.querySelector('#patient-procedure-options').innerHTML=procedureOptions(t.value).map(n=>'<option value="'+esc(n)+'"></option>').join('');return true}return false;}
  function treatmentEditor(){show('Daftar tindakan per jenis perawatan',form('patient-treatment-save','<p>Atur pilihan searchable. Satu tindakan per baris: Jenis perawatan | Nama tindakan. Sesuaikan dengan katalog rumah sakit.</p>'+label('Daftar tindakan',textarea('catalog',treatments().flatMap(t=>t.names.map(n=>t.type+' | '+n)).join('\n'),'required rows="12" maxlength="30000"')),'Simpan daftar'));ui.wide()}
  function audit(entities){return records('patient-change-log').filter(c=>entities.includes(c.entity)).slice().reverse().map(c=>'<p class="sub">'+esc(c.at)+' · '+esc(c.actor)+'<br>'+c.changes.map(x=>esc(x.label||x.fieldId)+': '+esc(display(x.from))+' → '+esc(display(x.to))).join('<br>')+'</p>').join('')||'<p class="sub">Belum ada perubahan.</p>'}
@@ -120,7 +128,7 @@ export function createPatientFields(ui){
   if(kind==='patient-treatment-save'){const groups=new Map();for(const line of clean(v.catalog).split('\n').filter(x=>clean(x))){const parts=line.split('|').map(clean);if(parts.length!==2||!parts[0]||!parts[1]||parts.some(x=>x.length>150))throw Error('Gunakan format Jenis perawatan | Nama tindakan.');if(!groups.has(parts[0]))groups.set(parts[0],new Set());groups.get(parts[0]).add(parts[1]);}if(!groups.size)throw Error('Isi minimal satu tindakan.');const next=[...groups].map(([type,names])=>({id:matchKey(type),type,names:[...names]}));recordChange('treatment-directory',[{label:'Daftar tindakan',from:treatments(),to:next}]);data().records['patient-treatment-directory']=next;return {page:'patient-fields',message:'Daftar tindakan tersimpan.'};}
   if(kind==='patient-field-save'){
    const old=fields().find(x=>x.id===f.dataset.id);if(f.dataset.id&&!old)throw Error('Field tidak ditemukan.');
-   const next={id:old?.id||'field-'+unique(),label:clean(v.label),type:old?.type||v.type,scope:old?.scope||v.scope,category:clean(v.category),unitContains:clean(v.unitContains),payerType:clean(v.payerType),order:Number(v.order),required:v.required==='true',active:v.active==='true',options:[...new Set(clean(v.options).split('\n').map(clean).filter(Boolean))]};
+   const next={id:old?.id||'field-'+unique(),label:clean(v.label),type:old?.type||v.type,scope:old?.scope||v.scope,category:clean(v.category),unitContains:clean(v.unitContains),payerType:clean(v.payerType),order:Number(v.order),required:v.required==='true',active:v.active==='true',...(old?.id===labFieldId?{automatic:v.automatic==='true',searchable:true}:{}),options:[...new Set(clean(v.options).split('\n').map(clean).filter(Boolean))]};
    if(!next.label||next.label.length>120||!fieldTypes.some(([k])=>k===next.type)||!fieldScopes.some(([k])=>k===next.scope)||next.category&&!sourceCategories.includes(next.category)||!Number.isInteger(next.order)||next.order<1||next.order>999)throw Error('Periksa nama, jenis, cakupan, dan urutan field.');
    if(['select','multiselect'].includes(next.type)&&!next.options.length)throw Error('Isi pilihan jawaban.');
    if(next.options.length>100||next.options.some(x=>x.length>150))throw Error('Maksimal 100 pilihan, masing-masing 150 karakter.');
@@ -130,7 +138,7 @@ export function createPatientFields(ui){
    const unit=clean(v.unit),category=sourceCategory(v.category);if(!unit||unit.length>180||!sourceCategories.includes(category))throw Error('Isi unit dan kategori sumber.');const list=records('patient-source-directory'),old=list.find(x=>matchKey(x.unit)===matchKey(unit));const next={id:old?.id||'source-'+unique(),unit,category};data().records['patient-source-directory']=old?list.map(x=>x.id===old.id?next:x):[...list,next];return {page:'directory',message:'Pemetaan sumber diperbarui di seluruh menu pasien.'};
   }
   const row=rowByKey(f.dataset.key);if(!row)throw Error('Kunjungan tidak ditemukan pada data aktif. Buka ulang pasien.');const key=visitKey(row);result={page:'patients',patientKey:key,message:'Data tindak lanjut tersimpan.'};
-  if(kind==='patient-extra-save'){const vals=formValues(f,row,['patient','visit']);delete vals['patient-procedure'];const parent=treatmentField();if(parent&&applies(parent,row)){const type=vals[parent.id],procedure=clean(v.procedure);if(procedure&&!procedureOptions(type).includes(procedure))throw Error('Pilih tindakan sesuai jenis perawatan. Tambahkan pilihan melalui Atur daftar tindakan.');if(!procedureField())data().records['patient-field-definitions']=[...fields(),{id:'patient-procedure',label:'Nama tindakan',type:'text',scope:'visit',category:parent.category||'',unitContains:parent.unitContains||'',payerType:parent.payerType||'',order:999,active:true}];vals['patient-procedure']=procedure||null;}putValues(row,vals);return result}
+  if(kind==='patient-extra-save'){const vals=formValues(f,row,['patient','visit']);if(Object.hasOwn(vals,labFieldId)&&f.elements.namedItem('labMode')?.value==='auto')vals[labFieldId]=null;delete vals['patient-procedure'];const parent=treatmentField();if(parent&&applies(parent,row)){const type=vals[parent.id],procedure=clean(v.procedure);if(procedure&&!procedureOptions(type).includes(procedure))throw Error('Pilih tindakan sesuai jenis perawatan. Tambahkan pilihan melalui Atur daftar tindakan.');if(!procedureField())data().records['patient-field-definitions']=[...fields(),{id:'patient-procedure',label:'Nama tindakan',type:'text',scope:'visit',category:parent.category||'',unitContains:parent.unitContains||'',payerType:parent.payerType||'',order:999,active:true}];vals['patient-procedure']=procedure||null;}putValues(row,vals);return result}
   const oldProgram=records('patient-programs').find(p=>p.id===(kind==='patient-log-save'?f.dataset.program:f.dataset.id));
   if(oldProgram&&oldProgram.patientKey!==patientKey(row))throw Error('Program tidak sesuai pasien.');
   if(kind==='patient-program-save'){
@@ -148,5 +156,5 @@ export function createPatientFields(ui){
   throw Error('Form pasien tidak dikenali.');
  }
  function click(d){if(d.pfield==='treatments')return treatmentEditor();if(d.pfield==='service'&&currentDetail){const g=currentDetail.j.groups.find(g=>g.key===d.pfieldId);if(g)document.querySelector('#patient-service-detail').innerHTML='<h3>'+esc(g.name)+'</h3>'+historyRows(g.rows);return}const row=rowByKey(d.pfieldKey);if(d.pfield==='settings'){ui.close();return ui.goto('patient-fields')}if(d.pfield==='new')return editor();if(d.pfield==='ranap')return editor(null,{label:'Jenis perawatan',type:'select',category:'RAWAT INAP',options:['Surgical','Medical']});if(d.pfield==='edit')return editor(fields().find(f=>f.id===d.pfieldId));if(d.pfield==='source-new')return sourceEditor();if(d.pfield==='source-edit')return sourceEditor(records('patient-source-directory').find(x=>x.id===d.pfieldId));if(!row)return;if(d.pfield==='detail')return detail(row);if(d.pfield==='program-new')return programEditor(row);const p=records('patient-programs').find(p=>p.id===d.pfieldId);if(d.pfield==='program-edit'&&p)return programEditor(row,p);if(d.pfield==='program'&&p)return programDetail(p,row);if(d.pfield==='log-new'&&p)return logEditor(p,row);if(d.pfield==='log-edit'){const l=records('patient-control-logs').find(l=>l.id===d.pfieldId),program=records('patient-programs').find(p=>p.id===l?.programId);if(program)return logEditor(program,row,l)}}
- return {view,sourcesPanel,detail,click,change,mutate,fields:active,allFields:fields,valueFor,putValues,putBatch,display,detailByKey:key=>detail(rowByKey(key)),hydrate:rows=>rows.map(r=>{const out=[...r];out[29]=Object.fromEntries(active().filter(f=>f.scope!=='program'&&applies(f,r)).map(f=>[f.id,valueFor(r,f)]));return out})};
+ return {view,sourcesPanel,detail,click,change,mutate,labField,labOrigin,enrichLab:rows=>rows.map(r=>{const out=[...r],f=labField();out[14]=f.active!==false&&applies(f,r)?valueFor(r,f)||'Belum terpetakan':'—';return out}),fields:active,allFields:fields,valueFor,putValues,putBatch,display,detailByKey:key=>detail(rowByKey(key)),hydrate:rows=>rows.map(r=>{const out=[...r];out[29]=Object.fromEntries(active().filter(f=>f.scope!=='program'&&applies(f,r)).map(f=>[f.id,valueFor(r,f)]));return out})};
 }

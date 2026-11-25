@@ -1,11 +1,11 @@
 import {installTableSorting} from './hospitalops-table-sort.js?v=20261121-sortcards1';
 import {createDispositions} from './hospitalops-dispositions.js?v=20261121-sortcards1';
 import {createPartnerPatients} from './hospitalops-partner-patients.js?v=20261121-sortcards1';
-import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261121-patients75';
+import {createLabTariffs} from './hospitalops-lab-tariffs.js?v=20261125-labcustom1';
 import {createDirectory} from './hospitalops-directory.js?v=20261125-flex1';
-import {createVisuals} from './hospitalops-visuals.js?v=20261125-flex1';
-import {createPatientFields,patientExtraModules} from './hospitalops-patient-fields.js?v=20261125-journey1';
-import {createPatients} from './hospitalops-patients.js?v=20261125-journey1';
+import {createVisuals} from './hospitalops-visuals.js?v=20261125-labcustom1';
+import {createPatientFields,patientExtraModules} from './hospitalops-patient-fields.js?v=20261125-labcustom1';
+import {createPatients} from './hospitalops-patients.js?v=20261125-labcustom1';
 import { createOperations } from './hospitalops-operations.js?v=20261122-pks-table1';
 import { createB2B, pipelineStages } from './hospitalops-b2b.js';
 import {
@@ -264,13 +264,13 @@ function settings(){
  return heading('Pengaturan Modul','Aktifkan modul atau tambah modul sesuai kebutuhan organisasi.',button('Tambah modul','data-action="module"','plus',true))+panel('Modul Organisasi','Atur visibilitas menu untuk '+org().name+'.',[...modules,...data().custom].filter(m=>m[0]!=='overview'&&m[0]!=='settings').map(m=>'<div class="settings-row"><div><strong>'+esc(m[1])+'</strong><div class="sub">'+esc(m[3])+'</div></div><label><input type="checkbox" data-toggle-module="'+esc(m[0])+'" '+(!data().disabled.includes(m[0])?'checked':'')+'> Aktif</label></div>').join(''));
 }
 const modal=document.querySelector('#modal');
-const labTariffs=createLabTariffs({records,data,heading,panel,button,table,esc,label,input,select,show,form,money,unique});
+const labTariffs=createLabTariffs({records,data,heading,panel,button,table,esc,label,input,select,show,form,money,unique,examOptions:()=>patientFields.labField().options});
 const directory=createDirectory({records,data,heading,panel,button,table,esc,label,input,show,form,
- wide:()=>modal.classList.add('lead-dialog'),enrichLab:labTariffs.enrich});
+ wide:()=>modal.classList.add('lead-dialog'),enrichLab:rows=>patientFields.enrichLab(labTariffs.enrich(rows))});
 function patientFieldsDisplay(v){return v===null||v===undefined?'—':Array.isArray(v)?v.join('; '):typeof v==='boolean'?v?'Ya':'Tidak':String(v)}
 const patientData=createPatients({records,data,heading,panel,button,table,esc,show,form,fmt,money,options,unique,enrich:directory.patients,previewEnrich:labTariffs.enrich,customFields:()=>patientFields.fields(),readCustom:(r,f)=>f?patientFields.valueFor(r,f):null,formatCustom:patientFieldsDisplay,writeCustomBatch:items=>patientFields.putBatch(items),putReferences:directory.put,references:directory.entries,detail:row=>patientFields.detail(row),actor:()=>currentUser?.email||previewRole,
   demo:false,wide:()=>modal.classList.add('lead-dialog')});
-const patientFields=createPatientFields({records,data,heading,panel,button,table,label,input,select,options,esc,show,form,fmt,unique,rows:()=>directory.patients(patientData.all()),goto,close:()=>modal.close(),actor:()=>currentUser?.email||previewRole,wide:()=>modal.classList.add('lead-dialog')});
+const patientFields=createPatientFields({records,data,heading,panel,button,table,label,input,select,options,esc,show,form,fmt,unique,rows:()=>directory.patients(patientData.all()),labAutomatic:row=>labTariffs.enrich([row])[0][14],goto,close:()=>modal.close(),actor:()=>currentUser?.email||previewRole,wide:()=>modal.classList.add('lead-dialog')});
 const visuals=createVisuals({rows:()=>patientFields.hydrate(directory.patients(patientData.all())),customFields:()=>patientFields.fields().filter(f=>f.scope!=='program'),records,data,heading,panel,button,table,label,input,select,options,esc,show,form,money,unique,
  wide:()=>modal.classList.add('lead-dialog')});
 const partnerPatients=createPartnerPatients({rows:()=>directory.patients(patientData.all()),profiles:()=>records('partners'),data,workspaceKey:()=>state.workspace?.id,
