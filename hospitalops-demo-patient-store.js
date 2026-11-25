@@ -1,3 +1,4 @@
+import {patientExtraModules} from './hospitalops-patient-fields.js?v=20261125-flex1';
 // Keep large patient reports out of localStorage's small synchronous quota.
 const databaseName='hospitalops-demo-patient-data';
 async function connect(){
@@ -30,7 +31,8 @@ export async function restoreDemoPatients(orgId,data){
  data.records??={};
  data.records['patient-buckets']=stored.buckets;
  data.records['patient-imports']=stored.imports;
+ for(const name of patientExtraModules)if(Array.isArray(stored.extra?.[name]))data.records[name]=stored.extra[name];
 }
 export async function saveDemoPatients(orgId,data){
- await transaction(orgId,'readwrite',{version:1,buckets:data.records['patient-buckets']||[],imports:data.records['patient-imports']||[],savedAt:new Date().toISOString()});
+ await transaction(orgId,'readwrite',{version:1,buckets:data.records['patient-buckets']||[],imports:data.records['patient-imports']||[],extra:Object.fromEntries(patientExtraModules.map(name=>[name,data.records[name]||[]])),savedAt:new Date().toISOString()});
 }

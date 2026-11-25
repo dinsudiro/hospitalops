@@ -15,17 +15,19 @@ export function aggregatePatients(rows,config){
  for(const r of rows){
   if(config.from&&r[5]<config.from||config.to&&r[5]>config.to||config.category&&r[7]!==config.category||
    config.insurance&&r[10]!==config.insurance||config.payerType&&r[13]!==config.payerType||config.labExam&&r[14]!==config.labExam)continue;
+  if(config.customField){const v=r[29]?.[config.customField],text=Array.isArray(v)?v.join('; '):typeof v==='boolean'?v?'Ya':'Tidak':String(v??'');if(text!==String(config.customValue??''))continue}
   visits++;
-  const key=config.group==='month'?r[5].slice(0,7):config.group==='day'?r[5]:r[columns[config.group]]||'Belum diisi';
-  if(!grouped.has(key))grouped.set(key,{key,visits:0,sourceBilling:0,claims:0,patients:new Set(),billingCount:0,revenue:0,revenueCount:0});
-  const group=grouped.get(key);group.visits++;group.sourceBilling+=Number(r[12])||0;group.claims+=Number(r[11])||0;
+  const customValue=r[29]?.[config.group.slice(7)],customKey=Array.isArray(customValue)?customValue.join('; '):typeof customValue==='boolean'?customValue?'Ya':'Tidak':String(customValue??'Belum diisi');
+  const key=config.group.startsWith('custom:')?customKey:config.group==='month'?r[5].slice(0,7):config.group==='day'?r[5]:r[columns[config.group]]||'Belum diisi';
+  if(!grouped.has(key))grouped.set(key,{key,visits:0,sourceBilling:0,claims:0,patients:new Set(),billingCount:0,revenue:0,revenueCount:0,customSum:0,customCount:0});
+  const group=grouped.get(key);group.visits++;if(config.metric.startsWith('custom:')){const value=r[29]?.[config.metric.slice(7)];if(typeof value==='number'&&Number.isFinite(value)){group.customSum+=value;group.customCount++}}group.sourceBilling+=Number(r[12])||0;group.claims+=Number(r[11])||0;
   if(r[12]!==null&&r[12]!==undefined)group.billingCount++;
   const revenue=patientRevenue(r);if(revenue!==null){group.revenue+=revenue;group.revenueCount++}
   const rm=String(r[1]||'').trim();
   if(rm&&rm!=='0'&&rm!=='-')group.patients.add(rm);else missingRM++;
  }
- const result=[...grouped.values()].filter(g=>config.metric!=='sourceBilling'||g.billingCount>0).filter(g=>!['revenue','average'].includes(config.metric)||g.revenueCount>0).map(g=>({key:g.key,value:config.metric==='average'?g.revenue/g.revenueCount:
-  config.metric==='patients'?g.patients.size:g[config.metric]}));
+ const result=[...grouped.values()].filter(g=>!config.metric.startsWith('custom:')||g.customCount>0).filter(g=>config.metric!=='sourceBilling'||g.billingCount>0).filter(g=>!['revenue','average'].includes(config.metric)||g.revenueCount>0).map(g=>({key:g.key,value:config.metric==='average'?g.revenue/g.revenueCount:
+  config.metric==='patients'?g.patients.size:config.metric.startsWith('custom:')?g.customSum:g[config.metric]}));
  result.sort(config.sort==='category'?(a,b)=>a.key.localeCompare(b.key):
   config.sort==='ascending'?(a,b)=>a.value-b.value||a.key.localeCompare(b.key):(a,b)=>b.value-a.value||a.key.localeCompare(b.key));
  return {rows:result.slice(0,Number(config.limit)||12),groups:result.length,visits,missingRM};
@@ -33,6 +35,9 @@ export function aggregatePatients(rows,config){
 
 export function createVisuals(ui){
  const {rows,records,data,heading,panel,button,table,label,input,select,options,esc,show,form,money,unique}=ui;
+ const customFields=()=>ui.customFields?.()||[];
+ const groupChoices=()=>[...groups,...customFields().map(f=>['custom:'+f.id,'Field: '+f.label])];
+ const metricChoices=()=>[...metrics,...customFields().filter(f=>f.type==='number').map(f=>['custom:'+f.id,'Jumlah nilai: '+f.label])];
  const number=value=>Number(value).toLocaleString('id-ID',{maximumFractionDigits:2});
  const format=(value,metric)=>currency.has(metric)?money(Math.round(value*100)/100):number(value);
  const act=(name,action,id='',primary=false)=>button(name,'data-visual="'+action+'" data-visual-id="'+esc(id)+'"',primary?'plus':'',primary);
@@ -43,15 +48,15 @@ export function createVisuals(ui){
   if(group==='day')return new Intl.DateTimeFormat('id-ID',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(key+'T00:00:00Z'));
   return key;
  };
- function renderVisual(config){
+ function renderVisual(config,source=rows()){
   config={...config,metric:metricOf(config.metric)};
-  const result=aggregatePatients(rows(),config);
+  const result=aggregatePatients(source,config);
   if(!result.rows.length)return '<div class="empty">Belum ada data pada filter ini.</div>';
   const pairs=result.rows.map(r=>({...r,label:groupLabel(r.key,config.group)}));
-  const desc=labelOf(metrics,config.metric)+' menurut '+labelOf(groups,config.group);
+  const desc=labelOf(metricChoices(),config.metric)+' menurut '+labelOf(groupChoices(),config.group);
   const note='<p class="sub">'+(currency.has(config.metric)?'Nilai kosong dilewati · ':'')+number(result.visits)+' kunjungan · '+pairs.length+' dari '+result.groups+' kelompok'+
    (config.metric==='patients'?' · Pasien unik dihitung per kelompok'+(result.missingRM?' · '+result.missingRM+' kunjungan tanpa No RM dilewati':''):'')+'</p>';
-  if(config.type==='table')return note+table([labelOf(groups,config.group),labelOf(metrics,config.metric)],
+  if(config.type==='table')return note+table([labelOf(groupChoices(),config.group),labelOf(metricChoices(),config.metric)],
    pairs.map(p=>'<tr><td>'+esc(p.label)+'</td><td>'+esc(format(p.value,config.metric))+'</td></tr>').join(''));
   if(config.type==='pie'){
    if(pairs.some(p=>p.value<0))return note+'<p role="status">Terdapat nilai negatif. Gunakan diagram batang, garis, atau tabel.</p>';
@@ -91,38 +96,43 @@ export function createVisuals(ui){
     '<text transform="translate('+x(i)+',238) rotate(35)" font-size="10">'+esc(p.label.length>16?p.label.slice(0,15)+'…':p.label)+'</text>').join('')+'</svg>';
  }
  function view(){
+  const source=rows();
   const list=saved().filter(r=>!r.archived).sort((a,b)=>Number(a.order)-Number(b.order)||a.id.localeCompare(b.id));
   const empty='<div class="empty">Tambahkan visualisasi, lalu pilih bentuk, kelompok data, nilai, dan filter.</div>';
-  const cards=list.map(c=>panel(c.name,labelOf(metrics,metricOf(c.metric))+' · '+labelOf(groups,c.group),
-   renderVisual(c),act('Atur','edit',c.id))).join('');
+  const cards=list.map(c=>panel(c.name,labelOf(metricChoices(),metricOf(c.metric))+' · '+labelOf(groupChoices(),c.group),
+   renderVisual(c,source),act('Atur','edit',c.id))).join('');
   const archived=saved().filter(r=>r.archived);
   return heading('Visualisasi Data','Susun dashboard dari tabel Data Pasien. Pendapatan memakai Total Asuransi. Setiap visualisasi memiliki pengaturan dan filter sendiri.',act('Tambah visualisasi','new','',true))+
-   (!rows().length?'<div class="panel card"><p>Unggah Excel di Data Pasien untuk menampilkan hasil visualisasi.</p>'+button('Buka Data Pasien','data-nav="patients"')+'</div>':'')+
+   (!source.length?'<div class="panel card"><p>Unggah Excel di Data Pasien untuk menampilkan hasil visualisasi.</p>'+button('Buka Data Pasien','data-nav="patients"')+'</div>':'')+
    (list.length?'<div class="grid viz-grid">'+cards+'</div>':empty)+
    (archived.length?'<details class="panel card"><summary>Visualisasi diarsipkan ('+archived.length+')</summary><div class="actions">'+archived.map(c=>act('Pulihkan '+c.name,'restore',c.id)).join('')+'</div></details>':'');
  }
  function editor(config){
-  const c={...(config||defaultConfig()),metric:metricOf(config?.metric||defaultConfig().metric)},categories=[...new Set(rows().map(r=>r[7]))].filter(Boolean).sort(),insurances=[...new Set(rows().map(r=>r[10]))].filter(Boolean).sort();
+  const source=rows();
+  const c={...(config||defaultConfig()),metric:metricOf(config?.metric||defaultConfig().metric)},categories=[...new Set(source.map(r=>r[7]))].filter(Boolean).sort(),insurances=[...new Set(source.map(r=>r[10]))].filter(Boolean).sort();
   const controls='<div class="ops-grid">'+label('Judul visualisasi',input('name',c.name,'text','required maxlength="100"'))+
    label('Bentuk visualisasi',select('type',types,c.type))+
-   label('Kelompok data',select('group',groups,c.group))+
-   label('Nilai yang dihitung',select('metric',metrics,c.metric))+
+   label('Kelompok data',select('group',groupChoices(),c.group))+
+   label('Nilai yang dihitung',select('metric',metricChoices(),c.metric))+
    label('Urutkan',select('sort',[['category','Kategori / waktu A–Z'],['descending','Nilai terbesar'],['ascending','Nilai terkecil']],c.sort))+
    label('Jumlah kelompok',input('limit',c.limit,'number','required min="1" max="30" step="1"'))+
    label('Tanggal masuk dari',input('from',c.from,'date','min="1900-01-01" max="2100-12-31"'))+
    label('Tanggal masuk sampai',input('to',c.to,'date','min="1900-01-01" max="2100-12-31"'))+
    label('Kategori unit',select('category',[['','Semua kategori'],...new Set([...categories,...(c.category?[c.category]:[])])],c.category))+
    label('Grup jaminan',select('insurance',[['','Semua grup jaminan'],...new Set([...insurances,...(c.insurance?[c.insurance]:[])])],c.insurance))+
-   label('Tipe Penjamin',select('payerType',[['','Semua tipe penjamin'],...new Set([...rows().map(r=>r[13]||'Belum terpetakan'),...(c.payerType?[c.payerType]:[])])],c.payerType||''))+
-   label('Jenis Pemeriksaan Lab',select('labExam',[['','Semua pemeriksaan lab'],...new Set([...rows().map(r=>r[14]||'—'),...(c.labExam?[c.labExam]:[])])],c.labExam||''))+
+   label('Tipe Penjamin',select('payerType',[['','Semua tipe penjamin'],...new Set([...source.map(r=>r[13]||'Belum terpetakan'),...(c.payerType?[c.payerType]:[])])],c.payerType||''))+
+   label('Jenis Pemeriksaan Lab',select('labExam',[['','Semua pemeriksaan lab'],...new Set([...source.map(r=>r[14]||'—'),...(c.labExam?[c.labExam]:[])])],c.labExam||''))+
+   label('Filter custom field',select('customField',[['','Tanpa filter custom'],...customFields().map(f=>[f.id,f.label])],c.customField||''))+
+   label('Nilai custom sama dengan',input('customValue',c.customValue||'','text','maxlength="2000" placeholder="Contoh: Surgical; Ya; 2026-11-25"'))+
    label('Posisi di dashboard',input('order',c.order||1,'number','required min="1" max="999" step="1"'))+'</div>'+
-   '<h3>Pratinjau</h3><div id="visual-preview">'+renderVisual(c)+'</div>';
+   '<h3>Pratinjau</h3><div id="visual-preview">'+renderVisual(c,source)+'</div>';
   show(config?'Atur visualisasi':'Tambah visualisasi',form('visual-save',controls,'Simpan visualisasi','data-id="'+esc(config?.id||'')+'"')+
    (config?'<div class="actions">'+act('Arsipkan visualisasi','archive',config.id)+'</div>':''));
   ui.wide();
  }
  function validate(v){
-  for(const [key,list] of [['type',types],['group',groups],['metric',metrics]]){
+  if(v.customField&&!customFields().some(f=>f.id===v.customField))throw Error('Custom field tidak tersedia.');
+  for(const [key,list] of [['type',types],['group',groupChoices()],['metric',metricChoices()]]){
    if(!list.some(([id])=>id===v[key]))throw Error('Periksa pilihan visualisasi.');
   }
   if(!['category','descending','ascending'].includes(v.sort)||!Number.isInteger(Number(v.limit))||v.limit<1||v.limit>30||

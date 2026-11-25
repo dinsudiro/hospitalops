@@ -1,3 +1,4 @@
+import {enrichPatientSources,parsePatientReferences,matchKey} from './hospitalops-patient-model.js?v=20261125-flex1';
 import {compareSortValues} from './hospitalops-table-sort.js?v=20261121-sortcards1';
 import {norm,readDocument} from './hospitalops-import.js';
 
@@ -35,7 +36,7 @@ export function enrichPatients(rows,directory){
   if(map.has(key)&&payerKey(map.get(key))!==payerKey(entry.type))map.set(key,'Perlu diperiksa');
   else if(!map.has(key))map.set(key,entry.type);
  }
- return rows.map(row=>[...row.slice(0,13),map.get(payerKey(row[9]))||'Belum terpetakan',row[14]??null,...row.slice(15)]);
+ return rows.map(row=>[...row.slice(0,13),map.get(payerKey(row[9]))||row[13]||'Belum terpetakan',row[14]??null,...row.slice(15)]);
 }
 function bucket(name){
  let hash=2166136261;for(const c of payerKey(name))hash=Math.imul(hash^c.charCodeAt(0),16777619);
@@ -105,7 +106,8 @@ export function createDirectory(ui){
   pending=null;f.querySelector('button.primary').disabled=true;area.textContent='Membaca referensi…';
   try{
    const file=target.files?.[0];
-   const result=parseDirectory(await readDocument(file,{maxSize:25*1024*1024}));
+   const sections=await readDocument(file,{maxSize:75*1024*1024}),result=parseDirectory(sections),ref=sections.find(s=>norm(s.name)==='ref');
+   const sourceRef=ref?parsePatientReferences(ref):{sources:[],errors:[]};result.sources=sourceRef.sources;result.errors.push(...sourceRef.errors);
    if(token!==request||!f.isConnected||workspace!==data())return true;
    pending={...result,scope:workspace};
    const old=new Map(entries().map(e=>[payerKey(e.name),e]));
@@ -123,6 +125,7 @@ export function createDirectory(ui){
   if(f.dataset.form==='directory-import'){
    if(!pending||pending.scope!==data()||pending.errors.length||!pending.rows.length)throw Error('Periksa pratinjau referensi.');
    put(pending.rows);
+   const map=new Map(records('patient-source-directory').map(r=>[matchKey(r.unit),r]));for(const r of pending.sources||[])map.set(matchKey(r.unit),{...r,id:map.get(matchKey(r.unit))?.id||'source-'+Date.now().toString(36)+'-'+map.size});data().records['patient-source-directory']=[...map.values()];
   }else{
    const name=String(v.name||'').trim().replace(/\s+/g,' '),type=String(v.type||'').trim().replace(/\s+/g,' ');
    if(!name||!type||name.length>180||type.length>100)throw Error('Lengkapi nama dan tipe penjamin.');
@@ -133,7 +136,7 @@ export function createDirectory(ui){
   }
   return {page:'directory',message:'Referensi tersimpan. Tipe Penjamin pasien otomatis menyesuaikan.'};
  }
- return {view,change,mutate,entries,sort(column,descending){sortColumn=column;sortDescending=descending;page=1;document.getElementById('directory-results').innerHTML=results()},setType:(name,type)=>put([{name,type}]),patients:rows=>ui.enrichLab(enrichPatients(rows,entries())),click(d){
+ return {view,change,mutate,entries,put,sort(column,descending){sortColumn=column;sortDescending=descending;page=1;document.getElementById('directory-results').innerHTML=results()},setType:(name,type)=>put([{name,type}]),patients:rows=>ui.enrichLab(enrichPatientSources(enrichPatients(rows,entries()),records('patient-source-directory'))),click(d){
   if(d.directory==='new')return editor(null,d.directoryKey||'');
   if(d.directory==='upload')return upload();
   if(d.directory==='edit'){const entry=entries().find(e=>payerKey(e.name)===d.directoryKey);if(entry)editor(entry)}
