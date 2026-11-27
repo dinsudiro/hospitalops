@@ -1,6 +1,6 @@
-import {patientRevenue} from './hospitalops-patient-metrics.js?v=20261121-revenue1';
+import {patientRevenue} from './hospitalops-patient-metrics.js?v=20261127-revenuefallback1';
 const groups=[['month','Bulan masuk'],['day','Tanggal masuk'],['category','Kategori unit'],['unit','Unit / poli'],['payer','Penjamin'],['insurance','Grup jaminan'],['payerType','Tipe Penjamin'],['labExam','Jenis Pemeriksaan Lab'],['doctor','Dokter'],['company','Perusahaan'],['careClass','Kelas perawatan'],['billStatus','Status billing']];
-const metrics=[['visits','Jumlah kunjungan'],['patients','Pasien unik (No RM)'],['revenue','Pendapatan (Total Asuransi)'],['sourceBilling','Total Billing (data sumber)'],['claims','Tarif e-Klaim / InaCBGs'],['average','Rata-rata pendapatan / kunjungan terisi']];
+const metrics=[['visits','Jumlah kunjungan'],['patients','Pasien unik (No RM)'],['revenue','Pendapatan (Asuransi, cadangan Billing)'],['sourceBilling','Total Billing (data sumber)'],['claims','Tarif e-Klaim / InaCBGs'],['average','Rata-rata pendapatan / kunjungan terisi']];
 const types=[['bar','Diagram batang'],['line','Diagram garis'],['pie','Diagram lingkaran'],['table','Tabel ringkasan']];
 const columns={category:7,unit:8,payer:9,insurance:10,payerType:13,labExam:14,doctor:15,company:18,careClass:17,billStatus:27};
 const colors=['#087b63','#449ed0','#e4a83b','#8672bf','#da7b75','#48b5a1','#717e97'];
@@ -104,7 +104,7 @@ export function createVisuals(ui){
   const cards=list.map(c=>panel(c.name,labelOf(metricChoices(),metricOf(c.metric))+' · '+labelOf(groupChoices(),c.group==='labExam'?'custom:patient-lab-exam':c.group),
    renderVisual(c,source),act('Atur','edit',c.id))).join('');
   const archived=saved().filter(r=>r.archived);
-  return heading('Visualisasi Data','Susun dashboard dari tabel Data Pasien. Pendapatan memakai Total Asuransi. Setiap visualisasi memiliki pengaturan dan filter sendiri.',act('Tambah visualisasi','new','',true))+
+  return heading('Visualisasi Data','Susun dashboard dari tabel Data Pasien. Pendapatan mengutamakan Total Asuransi; jika kosong memakai Total Billing. Nilai 0 tetap dihitung dari kolom yang diprioritaskan. Setiap visualisasi memiliki pengaturan dan filter sendiri.',act('Tambah visualisasi','new','',true))+
    (!source.length?'<div class="panel card"><p>Unggah Excel di Data Pasien untuk menampilkan hasil visualisasi.</p>'+button('Buka Data Pasien','data-nav="patients"')+'</div>':'')+
    (list.length?'<div class="grid viz-grid">'+cards+'</div>':empty)+
    (archived.length?'<details class="panel card"><summary>Visualisasi diarsipkan ('+archived.length+')</summary><div class="actions">'+archived.map(c=>act('Pulihkan '+c.name,'restore',c.id)).join('')+'</div></details>':'');

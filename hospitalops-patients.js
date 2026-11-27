@@ -1,5 +1,5 @@
 import {compareSortValues} from './hospitalops-table-sort.js?v=20261121-sortcards1';
-import {patientRevenue} from './hospitalops-patient-metrics.js?v=20261121-revenue1';
+import {patientRevenue,patientRevenueSource} from './hospitalops-patient-metrics.js?v=20261127-revenuefallback1';
 import {norm} from './hospitalops-import.js';
 import {clean,matchKey,visitKey,mappingFields,guessMapping,guessHeader,referenceGuess,parsePatientReferences,parseMappedPatients} from './hospitalops-patient-model.js?v=20261125-flex1';
 export {patientDate,patientAmount} from './hospitalops-patient-model.js?v=20261125-flex1';
@@ -70,9 +70,10 @@ export function createPatients(ui){
   const missing=rows.filter(r=>r[13]==='Belum terpetakan').length;
   const noRevenue=rows.filter(r=>patientRevenue(r)===null).length;
   const insurance=rows.reduce((sum,r)=>sum+(patientRevenue(r)??0),0);
-  return '<p class="sub">'+rows.length.toLocaleString('id-ID')+' kunjungan · Pendapatan (Total Asuransi) '+money(insurance)+' · Total Billing (data sumber) '+money(billing)+' · InaCBGs / e-Klaim '+money(claims)+'</p>'+
+  return '<p class="sub">'+rows.length.toLocaleString('id-ID')+' kunjungan · Pendapatan '+money(insurance)+' · Total Billing (data sumber) '+money(billing)+' · InaCBGs / e-Klaim '+money(claims)+'</p>'+
    (from&&to&&from>to?'<p role="alert">Tanggal sampai harus sama dengan atau setelah tanggal dari.</p>':'')+
-   (noRevenue?'<p class="sub">'+noRevenue.toLocaleString('id-ID')+' kunjungan memiliki Total Asuransi kosong. Pendapatan hanya menjumlahkan Total Asuransi yang terisi.</p>':'')+
+   '<p class="sub">Pendapatan memakai Total Asuransi jika terisi, termasuk 0; jika kosong memakai Total Billing. '+rows.filter(r=>patientRevenueSource(r)==='Total Billing').length.toLocaleString('id-ID')+' kunjungan memakai Total Billing. Kedua kolom tidak dijumlahkan.</p>'+
+   (noRevenue?'<p class="sub">'+noRevenue.toLocaleString('id-ID')+' kunjungan belum memiliki nilai pendapatan dari Total Asuransi maupun Total Billing.</p>':'')+
    (missing?'<p class="sub">'+missing+' kunjungan belum terpetakan. Lengkapi nama penjamin di Ref Direktori.</p>':'')+
    table(displayColumns(),body||'<tr><td colspan="'+displayColumns().length+'">Belum ada data yang sesuai. Pilih Upload Excel untuk memuat laporan.</td></tr>')+
    '<div class="actions">'+button('Sebelumnya','data-patients="previous" '+(page===1?'disabled':''))+
@@ -97,7 +98,7 @@ export function createPatients(ui){
    '<label>Baris judul kolom<input id="patient-header" type="number" min="1" max="'+Math.min(s.rows.length,100)+'" value="'+(s.header+1)+'"></label>'+
    '<label>Profil pemetaan tersimpan<select id="patient-profile">'+options([['','Pemetaan otomatis'],...saved.map(p=>[p.id,p.name])],'')+'</select></label>'+
    '<label>Nama profil (simpan untuk upload berikutnya)<input id="patient-profile-name" type="text" maxlength="120" value="'+esc(profileName)+'"></label></div>'+
-   '<details '+(['name','registration','admitted','unit'].some(k=>mapping[k]<0)?'open':'')+'><summary>Pemetaan kolom · periksa sebelum menyimpan</summary><p class="sub">Wajib: Nama Pasien, No. Registrasi, Tanggal Masuk, Unit. Pendapatan hanya dari kolom yang dipetakan ke Total Asuransi. Kolom lain opsional.</p><div class="ops-grid">'+mappingFields.map(([k,l])=>'<label>'+esc(l)+mapSelect(k,l)+'</label>').join('')+'</div>'+
+   '<details '+(['name','registration','admitted','unit'].some(k=>mapping[k]<0)?'open':'')+'><summary>Pemetaan kolom · periksa sebelum menyimpan</summary><p class="sub">Wajib: Nama Pasien, No. Registrasi, Tanggal Masuk, Unit. Pendapatan mengutamakan Total Asuransi; jika kosong memakai Total Billing. Petakan kedua kolom sesuai sumber. Kolom lain opsional.</p><div class="ops-grid">'+mappingFields.map(([k,l])=>'<label>'+esc(l)+mapSelect(k,l)+'</label>').join('')+'</div>'+
    '<h3>Kolom custom (opsional)</h3><div class="ops-grid">'+ui.customFields().filter(f=>f.scope!=='program').map(f=>'<label>'+esc(f.label)+mapSelect('custom:'+f.id,f.label)+'</label>').join('')+'</div><p class="sub">Kolom custom yang dipetakan hanya memperbarui nilai terisi. Isian manual lainnya tetap disimpan.</p></details>'+
    '<label>Sheet acuan Ref<select id="patient-ref-sheet">'+options([['-1','Tanpa impor Ref (pakai referensi tersimpan)'],...sections.map((s,i)=>[String(i),s.name])],String(refSheet))+'</select></label>'+
    (refSheet>=0?'<details><summary>Pemetaan Ref · penjamin dan sumber layanan</summary><div class="ops-grid">'+[['payer','Nama penjamin'],['type','Tipe penjamin'],['unit','Unit / layanan'],['category','Kategori sumber']].map(([k,l])=>'<label>'+l+'<select data-patient-ref="'+k+'">'+options(columnChoices(sections[refSheet]),String(refMapping[k]??-1))+'</select></label>').join('')+'</div><p class="sub">Pemetaan unit membaca seluruh sheet, termasuk pasangan unit/kategori di baris pertama.</p></details>':'');
@@ -115,7 +116,7 @@ export function createPatients(ui){
   const custom=Object.entries(mapping).some(([k,v])=>k.startsWith('custom:')&&Number(v)>=0);
   document.getElementById('patient-preview').innerHTML='<p>'+parsed.rows.length+' kunjungan valid · '+added+' baru · '+updated+' diperbarui · '+unchanged+' sama.</p>'+
    '<p class="sub">'+parsed.duplicates+' duplikasi · '+parsed.summaries+' baris total dilewati. '+refs.payers.length+' acuan penjamin dan '+refs.sources.length+' acuan sumber akan digabungkan.</p>'+
-   (Number(mapping.revenue)<0?'<p role="status">Pendapatan belum dipetakan. Total Asuransi tetap kosong; Total Billing tidak digunakan sebagai pengganti.</p>':'')+
+   (Number(mapping.revenue)<0?'<p role="status">Total Asuransi belum dipetakan. Pendapatan memakai Total Billing jika tersedia. Nilai kolom sumber tetap dipertahankan.</p>':'')+
    ([...(s.warnings||[]),...refs.warnings].length?'<p role="status">'+[...(s.warnings||[]),...refs.warnings].map(esc).join(' ')+'</p>':'')+
    (combinedErrors.length?'<p role="alert">'+combinedErrors.length+' masalah perlu diperiksa.</p><ul>'+combinedErrors.slice(0,8).map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul>'+(!pending.conflicts&&parsed.rows.length?'<label><input type="checkbox" id="patient-skip-invalid"> Simpan '+parsed.rows.length+' baris valid saja dan lewati '+combinedErrors.length+' baris bermasalah.</label>':''):'')+
    (custom?'<label><input type="checkbox" id="patient-custom-confirm"> Saya setuju memperbarui nilai custom dari kolom yang dipetakan (nilai kosong dilewati).</label>':'')+
